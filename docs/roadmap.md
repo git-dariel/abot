@@ -23,7 +23,9 @@
 
 - Implemented: mDNS advertisement/browse primitives, manual local endpoint fallback, a Windows Ed25519 identity stored in Windows Credential Manager, signed five-minute QR invitations, on-device Android signature verification/scanning, matching comparison codes, explicit approval on both screens, Android public-identity trust/revocation, and receiver-key binding in the encrypted offer.
 - Tested: Rust tests cover invalid/public endpoints, invitation round trip, tampering, expiry, signatures, and consent ordering; Android unit tests verify a signed cross-language-format invitation and reject tampering; platform builds and lint pass.
-- Pending: Android private identity and mutual authenticated key agreement, tamper-resistant Android trust metadata, replay cache, discovery UI integration, and signed-QR real-hardware validation.
+- Implemented UI fix: the Android pairing flow is now a compact black-and-white, vertically scrollable two-step screen. The scanned payload is hidden after verification, while manual entry remains an opt-in fallback.
+- Tested UI fix: Android unit tests, debug APK assembly, and lint pass.
+- Pending: user/device confirmation of the scroll and contrast fix, Android private identity and mutual authenticated key agreement, tamper-resistant Android trust metadata, replay cache, discovery UI integration, and signed-QR real-hardware validation.
 
 ## Milestone 4 — Android to Windows transfer
 

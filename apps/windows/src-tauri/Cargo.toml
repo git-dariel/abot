@@ -16,10 +16,13 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 abot-security = { path = "../../../crates/security" }
+abot-pairing = { path = "../../../crates/pairing" }
 abot-transfer-core = { path = "../../../crates/transfer-core" }
 base64.workspace = true
 hex.workspace = true
 local-ip-address = "0.6"
+keyring = { version = "3.6.3", default-features = false, features = ["windows-native"] }
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true

@@ -16,6 +16,6 @@
 
 ## Cryptographic direction
 
-The connected development slice uses AES-256-GCM with a random, one-use 32-byte secret transferred in the manual pairing link. Distinct associated-data domains authenticate offers, decisions, chunks, and completion; chunk authentication also binds the transfer UUID and sequence. This protects the initial file path without treating discovery as identity.
+The connected slice uses AES-256-GCM with a random, one-use 32-byte secret carried in a signed, expiring QR invitation. Distinct associated-data domains authenticate offers, decisions, chunks, and completion; chunk authentication also binds the transfer UUID and sequence. The invitation binds the secret and private endpoint to the persistent Windows Ed25519 identity, and the encrypted offer names that receiver key.
 
-Ed25519 still signs the deterministic pairing invitation, and the six-digit display code is derived from that authenticated transcript; it is not an encryption key. Binding the encrypted channel to persistent identities, platform secure storage, trust revocation, and a replay cache remain pending and require focused review before production release.
+The six-digit display code is derived from the authenticated transcript; it is not an encryption key. The Windows private identity is held in Windows Credential Manager. Android stores only the explicitly approved public identity and exposes revocation. Android private identity, mutual authenticated key agreement, tamper-resistant trust metadata, and a replay cache remain pending and require focused review before production release.

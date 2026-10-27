@@ -21,19 +21,20 @@
 
 ## Milestone 3 — Discovery and pairing
 
-- Implemented: mDNS advertisement/browse, manual local endpoint fallback, Ed25519 identities, signed expiring QR invitations, comparison codes, and explicit mutual-consent state machine.
-- Tested: unit tests cover invalid/public endpoints, invitation round trip, tampering, expiry, signatures, and consent ordering.
-- Pending: platform UI integration, secure identity storage, trust revocation, and an encrypted transport-bound handshake.
+- Implemented: mDNS advertisement/browse primitives, manual local endpoint fallback, a Windows Ed25519 identity stored in Windows Credential Manager, signed five-minute QR invitations, on-device Android signature verification/scanning, matching comparison codes, explicit approval on both screens, Android public-identity trust/revocation, and receiver-key binding in the encrypted offer.
+- Tested: Rust tests cover invalid/public endpoints, invitation round trip, tampering, expiry, signatures, and consent ordering; Android unit tests verify a signed cross-language-format invitation and reject tampering; platform builds and lint pass.
+- Pending: Android private identity and mutual authenticated key agreement, tamper-resistant Android trust metadata, replay cache, discovery UI integration, and signed-QR real-hardware validation.
 
 ## Milestone 4 — Android to Windows transfer
 
 - Implemented: one-use manual pairing link, AES-256-GCM encrypted/authenticated offer-decision-data-completion frames, explicit Windows acceptance, Android 64 KiB streaming, Windows temporary-file receive, byte-count/SHA-256 verification, atomic finalization, and completion acknowledgement.
 - Tested: Rust encrypted-frame authentication; 130 KB multi-frame decrypt/finalize test; TCP integration tests proving rejection creates no file and the destination remains empty before consent but contains verified bytes after acceptance; Rust/Clippy, React typecheck/build, protocol tests, and Android unit/lint/APK checks.
-- Pending: real Android-to-Windows hardware run, UI visual inspection, Windows Firewall observation, identity-bound handshake, secure identity persistence, replay cache, cancellation/resume, multi-file offers, and progress reporting on Windows.
+- Observed: the project owner reported the earlier manual-link Android-to-Windows flow working on a real phone and laptop; device/OS, file size, matching hashes, duration, and firewall behavior were not recorded, so this is not yet a formal acceptance record.
+- Pending: a recorded signed-QR hardware run, UI visual inspection, Android mutual identity, replay cache, cancellation/resume, multi-file offers, and progress reporting on Windows.
 
 ## Milestones 5–10
 
-Reverse-direction transfer, durable pairing, gestures, polished UI, reliability testing, and signed releases remain pending. No real cross-device acceptance criterion has passed yet.
+Reverse-direction transfer, mutual durable pairing, gestures, polished UI, reliability testing, and signed releases remain pending. The reported manual-link hardware success still needs the test evidence required by the acceptance plan.
 
 ## Branding milestone — ABOT
 

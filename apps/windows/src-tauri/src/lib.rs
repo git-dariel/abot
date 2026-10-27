@@ -1,10 +1,11 @@
+use abot_pairing::PairingInvitation;
 use abot_security::{
-    decrypt_frame, encrypt_frame, generate_session_token, AEAD_NONCE_BYTES, SESSION_KEY_BYTES,
+    decrypt_frame, encrypt_frame, fingerprint, DeviceIdentity, AEAD_NONCE_BYTES, SESSION_KEY_BYTES,
 };
 use abot_transfer_core::{
     is_safe_leaf_name, parse_sha256, receive_verified, sha256_file, ExpectedFile,
 };
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -13,6 +14,7 @@ use std::net::{IpAddr, SocketAddr, TcpListener};
 use std::path::PathBuf;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
@@ -25,6 +27,9 @@ const COMPLETE_AAD: &[u8] = b"AIRBRIDGE-COMPLETE-V1";
 const MAX_CONTROL_FRAME: usize = 16 * 1024;
 const MAX_DATA_FRAME: usize = 64 * 1024 + 16;
 const MAX_FILE_SIZE: u64 = 20 * 1024 * 1024 * 1024;
+const IDENTITY_SERVICE: &str = "app.abot.desktop";
+const IDENTITY_ACCOUNT: &str = "device-identity-v1";
+const INVITATION_LIFETIME_MS: u64 = 5 * 60 * 1000;
 
 #[derive(Default)]
 struct SelectedFiles(Mutex<HashMap<Uuid, PathBuf>>);
@@ -50,6 +55,10 @@ struct ReceiverSnapshot {
     state: String,
     endpoint: Option<String>,
     pairing_uri: Option<String>,
+    pairing_qr_data_url: Option<String>,
+    pairing_code: Option<String>,
+    pairing_approved: bool,
+    identity_fingerprint: Option<String>,
     offer: Option<IncomingOffer>,
     saved_path: Option<String>,
     error: Option<String>,
@@ -64,6 +73,7 @@ struct IncomingOffer {
     name: String,
     size: u64,
     sha256: String,
+    receiver_identity_key: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -145,15 +155,41 @@ fn start_receiver(
     let local_ip = private_local_ipv4()
         .ok_or_else(|| "No private IPv4 network address is available".to_owned())?;
     let endpoint = format!("{local_ip}:{port}");
-    let secret = generate_session_token();
-    let pairing_uri = format!(
-        "abot://pair?endpoint={endpoint}&secret={}",
-        URL_SAFE_NO_PAD.encode(secret)
-    );
+    let identity = load_or_create_identity()?;
+    let identity_key = identity.public_key();
+    let device_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, &identity_key);
+    let expires_at_unix_ms = now_unix_ms()?.saturating_add(INVITATION_LIFETIME_MS);
+    let invitation = PairingInvitation::create(
+        &identity,
+        device_id,
+        "ABOT Windows".to_owned(),
+        endpoint
+            .parse()
+            .map_err(|_| "Could not create the pairing endpoint".to_owned())?,
+        expires_at_unix_ms,
+    )
+    .map_err(|error| format!("Could not create the signed pairing invitation: {error}"))?;
+    let secret: [u8; SESSION_KEY_BYTES] = hex::decode(&invitation.nonce_hex)
+        .map_err(|_| "Could not create the pairing secret".to_owned())?
+        .try_into()
+        .map_err(|_| "Could not create the pairing secret".to_owned())?;
+    let payload = invitation
+        .to_qr_payload()
+        .map_err(|error| error.to_string())?;
+    let pairing_uri = format!("abot://pair?data={}", URL_SAFE_NO_PAD.encode(payload));
+    let pairing_qr_data_url = qr_data_url(&pairing_uri)?;
+    let pairing_code = invitation
+        .comparison_code()
+        .map_err(|error| error.to_string())?;
+    let identity_fingerprint = hex::encode(fingerprint(&identity_key));
     let snapshot = ReceiverSnapshot {
         state: "waiting".to_owned(),
         endpoint: Some(endpoint),
         pairing_uri: Some(pairing_uri),
+        pairing_qr_data_url: Some(pairing_qr_data_url),
+        pairing_code: Some(pairing_code),
+        pairing_approved: false,
+        identity_fingerprint: Some(identity_fingerprint),
         offer: None,
         saved_path: None,
         error: None,
@@ -162,7 +198,14 @@ fn start_receiver(
 
     let shared = Arc::clone(&receiver.0);
     std::thread::spawn(move || {
-        if let Err(error) = receive_once(listener, destination, secret, &shared) {
+        if let Err(error) = receive_once(
+            listener,
+            destination,
+            secret,
+            hex::encode(identity_key),
+            expires_at_unix_ms,
+            &shared,
+        ) {
             let prior = snapshot_without_secret(&shared);
             let _ = set_receiver_snapshot(
                 &shared,
@@ -189,6 +232,22 @@ fn receiver_status(receiver: State<'_, ReceiverState>) -> Result<ReceiverSnapsho
 }
 
 #[tauri::command]
+fn approve_pairing(receiver: State<'_, ReceiverState>) -> Result<ReceiverSnapshot, String> {
+    let mut inner = receiver
+        .0
+        .inner
+        .lock()
+        .map_err(|_| "Receiver state is unavailable".to_owned())?;
+    if !matches!(inner.snapshot.state.as_str(), "waiting" | "offerPending") {
+        return Err("There is no active pairing request".to_owned());
+    }
+    inner.snapshot.pairing_approved = true;
+    let snapshot = inner.snapshot.clone();
+    receiver.0.changed.notify_all();
+    Ok(snapshot)
+}
+
+#[tauri::command]
 fn decide_transfer(
     accepted: bool,
     receiver: State<'_, ReceiverState>,
@@ -200,6 +259,11 @@ fn decide_transfer(
         .map_err(|_| "Receiver state is unavailable".to_owned())?;
     if inner.snapshot.state != "offerPending" {
         return Err("There is no transfer offer awaiting a decision".to_owned());
+    }
+    if accepted && !inner.snapshot.pairing_approved {
+        return Err(
+            "Compare the pairing code and approve this device before accepting the file".to_owned(),
+        );
     }
     inner.decision = Some(accepted);
     inner.snapshot.state = if accepted { "receiving" } else { "rejected" }.to_owned();
@@ -219,6 +283,8 @@ fn receive_once(
     listener: TcpListener,
     destination: PathBuf,
     secret: [u8; SESSION_KEY_BYTES],
+    expected_receiver_identity_key: String,
+    expires_at_unix_ms: u64,
     shared: &Arc<SharedReceiver>,
 ) -> Result<(), String> {
     let (mut stream, peer) = listener
@@ -226,6 +292,9 @@ fn receive_once(
         .map_err(|_| "The local receiver stopped unexpectedly".to_owned())?;
     if !is_local_peer(peer) {
         return Err("A connection from outside the local network was rejected".to_owned());
+    }
+    if now_unix_ms()? > expires_at_unix_ms {
+        return Err("The pairing invitation expired before a connection was made".to_owned());
     }
     stream
         .set_read_timeout(Some(Duration::from_secs(30)))
@@ -245,7 +314,7 @@ fn receive_once(
         .map_err(|_| "The encrypted offer could not be authenticated".to_owned())?;
     let offer: IncomingOffer = serde_json::from_slice(&offer_bytes)
         .map_err(|_| "The sender provided malformed metadata".to_owned())?;
-    validate_offer(&offer)?;
+    validate_offer(&offer, &expected_receiver_identity_key)?;
 
     {
         let mut inner = shared
@@ -255,6 +324,7 @@ fn receive_once(
         inner.snapshot.state = "offerPending".to_owned();
         inner.snapshot.offer = Some(offer.clone());
         inner.snapshot.pairing_uri = None;
+        inner.snapshot.pairing_qr_data_url = None;
         inner.decision = None;
     }
     shared.changed.notify_all();
@@ -332,7 +402,10 @@ fn is_local_peer(peer: SocketAddr) -> bool {
     }
 }
 
-fn validate_offer(offer: &IncomingOffer) -> Result<(), String> {
+fn validate_offer(
+    offer: &IncomingOffer,
+    expected_receiver_identity_key: &str,
+) -> Result<(), String> {
     if offer.version != 1 {
         return Err("The sender uses an unsupported protocol version".to_owned());
     }
@@ -343,7 +416,52 @@ fn validate_offer(offer: &IncomingOffer) -> Result<(), String> {
         return Err("The offered file exceeds the 20 GiB limit".to_owned());
     }
     parse_sha256(&offer.sha256).map_err(|_| "The offered SHA-256 value is invalid".to_owned())?;
+    if offer.receiver_identity_key != expected_receiver_identity_key {
+        return Err("The offer is not bound to this receiver identity".to_owned());
+    }
     Ok(())
+}
+
+fn now_unix_ms() -> Result<u64, String> {
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| "The system clock is invalid".to_owned())?
+        .as_millis();
+    u64::try_from(millis).map_err(|_| "The system clock is invalid".to_owned())
+}
+
+fn load_or_create_identity() -> Result<DeviceIdentity, String> {
+    let entry = keyring::Entry::new(IDENTITY_SERVICE, IDENTITY_ACCOUNT)
+        .map_err(|error| format!("Windows Credential Manager is unavailable: {error}"))?;
+    match entry.get_secret() {
+        Ok(secret) => {
+            let bytes: [u8; 32] = secret
+                .try_into()
+                .map_err(|_| "The stored ABOT identity is invalid".to_owned())?;
+            Ok(DeviceIdentity::from_secret_bytes(&bytes))
+        }
+        Err(keyring::Error::NoEntry) => {
+            let identity = DeviceIdentity::generate();
+            entry
+                .set_secret(&identity.secret_bytes())
+                .map_err(|error| format!("Could not store the ABOT identity securely: {error}"))?;
+            Ok(identity)
+        }
+        Err(error) => Err(format!("Could not read the ABOT identity: {error}")),
+    }
+}
+
+fn qr_data_url(value: &str) -> Result<String, String> {
+    let code = qrcode::QrCode::new(value.as_bytes())
+        .map_err(|_| "The pairing invitation is too large for a QR code".to_owned())?;
+    let svg = code
+        .render::<qrcode::render::svg::Color<'_>>()
+        .min_dimensions(320, 320)
+        .build();
+    Ok(format!(
+        "data:image/svg+xml;base64,{}",
+        STANDARD.encode(svg)
+    ))
 }
 
 fn set_receiver_snapshot(
@@ -369,6 +487,10 @@ fn snapshot_without_secret(shared: &Arc<SharedReceiver>) -> ReceiverSnapshot {
             state: inner.snapshot.state.clone(),
             endpoint: inner.snapshot.endpoint.clone(),
             pairing_uri: None,
+            pairing_qr_data_url: None,
+            pairing_code: inner.snapshot.pairing_code.clone(),
+            pairing_approved: inner.snapshot.pairing_approved,
+            identity_fingerprint: inner.snapshot.identity_fingerprint.clone(),
             offer: inner.snapshot.offer.clone(),
             saved_path: inner.snapshot.saved_path.clone(),
             error: inner.snapshot.error.clone(),
@@ -534,6 +656,7 @@ pub fn run() {
             select_files,
             start_receiver,
             receiver_status,
+            approve_pairing,
             decide_transfer
         ])
         .run(tauri::generate_context!())
@@ -598,6 +721,24 @@ mod tests {
     }
 
     #[test]
+    fn rejects_offer_bound_to_another_receiver_identity() {
+        let offer = IncomingOffer {
+            version: 1,
+            transfer_id: Uuid::new_v4(),
+            file_id: Uuid::new_v4(),
+            name: "safe.txt".to_owned(),
+            size: 4,
+            sha256: hex::encode(Sha256::digest(b"data")),
+            receiver_identity_key: "11".repeat(32),
+        };
+
+        assert_eq!(
+            validate_offer(&offer, &"22".repeat(32)),
+            Err("The offer is not bound to this receiver identity".to_owned())
+        );
+    }
+
+    #[test]
     fn receiver_waits_for_consent_then_saves_verified_encrypted_bytes() {
         let directory = tempfile::tempdir().unwrap();
         let destination = directory.path().to_path_buf();
@@ -608,6 +749,7 @@ mod tests {
         let key = [11_u8; SESSION_KEY_BYTES];
         let transfer_id = Uuid::new_v4();
         let bytes = b"encrypted local transfer".to_vec();
+        let receiver_identity_key = "11".repeat(32);
         let offer = IncomingOffer {
             version: 1,
             transfer_id,
@@ -615,10 +757,19 @@ mod tests {
             name: "received.txt".to_owned(),
             size: bytes.len() as u64,
             sha256: hex::encode(Sha256::digest(&bytes)),
+            receiver_identity_key: receiver_identity_key.clone(),
         };
 
         let receiver = thread::spawn(move || {
-            receive_once(listener, destination, key, &receiver_shared).unwrap()
+            receive_once(
+                listener,
+                destination,
+                key,
+                receiver_identity_key,
+                u64::MAX,
+                &receiver_shared,
+            )
+            .unwrap()
         });
         let mut client = TcpStream::connect(endpoint).unwrap();
         client.write_all(MAGIC).unwrap();
@@ -646,6 +797,7 @@ mod tests {
         {
             let mut inner = shared.inner.lock().unwrap();
             inner.decision = Some(true);
+            inner.snapshot.pairing_approved = true;
             inner.snapshot.state = "receiving".to_owned();
             shared.changed.notify_all();
         }
@@ -681,6 +833,7 @@ mod tests {
         let shared = Arc::new(SharedReceiver::default());
         let receiver_shared = Arc::clone(&shared);
         let key = [17_u8; SESSION_KEY_BYTES];
+        let receiver_identity_key = "22".repeat(32);
         let offer = IncomingOffer {
             version: 1,
             transfer_id: Uuid::new_v4(),
@@ -688,10 +841,19 @@ mod tests {
             name: "rejected.txt".to_owned(),
             size: 4,
             sha256: hex::encode(Sha256::digest(b"data")),
+            receiver_identity_key: receiver_identity_key.clone(),
         };
 
         let receiver = thread::spawn(move || {
-            receive_once(listener, destination, key, &receiver_shared).unwrap()
+            receive_once(
+                listener,
+                destination,
+                key,
+                receiver_identity_key,
+                u64::MAX,
+                &receiver_shared,
+            )
+            .unwrap()
         });
         let mut client = TcpStream::connect(endpoint).unwrap();
         client.write_all(MAGIC).unwrap();

@@ -6,13 +6,13 @@ Gesture-powered, local-first file sharing between Android phones and Windows com
 
 ## Current status
 
-This repository now contains an initial Android-to-Windows transfer path in addition to its architecture and compiled-shell baseline. Windows creates a one-use 256-bit pairing link and owns the destination folder; Android sends an encrypted metadata offer, waits for explicit approval, then streams one file in authenticated 64 KiB chunks. Windows writes to a temporary file, verifies size and SHA-256, atomically finalizes it, and returns an encrypted completion acknowledgement. Real-device transfer, durable identity-bound pairing, reverse-direction transfer, and gesture recognition are **not yet verified or complete**.
+This repository contains an identity-bound Android-to-Windows transfer path. Windows stores a persistent Ed25519 identity in Windows Credential Manager and displays a signed, five-minute QR invitation. Android verifies it locally, shows the same six-digit comparison code, and stores the approved public identity for later recognition or revocation. Both users approve pairing before Windows can accept an encrypted offer. Files then stream in authenticated 64 KiB chunks to a temporary file for size/SHA-256 verification and atomic finalization. Mutual long-lived identity, reverse-direction transfer, replay caching, and gesture recognition are **not yet complete**.
 
 Verified on the current development machine:
 
 - Protocol/schema and synthetic loopback-transfer tests pass with Node.js; the Windows React UI typechecks and produces a Vite production bundle.
 - Android unit tests and the debug APK build pass through the checked-in Gradle wrapper.
-- Fifteen Rust/Tauri tests, including accepted and rejected encrypted TCP loopback transfers, and Clippy with warnings denied pass.
+- Sixteen Rust/Tauri tests, including accepted/rejected encrypted TCP loopback transfers and receiver-identity mismatch rejection, and Clippy with warnings denied pass.
 - The native Windows executable launches in a bounded smoke test, and debug NSIS/MSI bundles are generated.
 
 See [the roadmap](docs/roadmap.md) and [environment report](docs/environment.md) for exact evidence.
@@ -59,20 +59,20 @@ cd apps/windows
 pnpm exec tauri build --debug
 ```
 
-These commands validate components, not the end-to-end acceptance criteria. Real Android-to-Windows and Windows-to-Android hardware tests remain pending.
+These commands validate components, not the complete end-to-end acceptance criteria. The earlier manual-link flow was reported working by the project owner on a phone and laptop; the new signed-QR flow still needs a recorded hardware run with matching hashes.
 
 ## Try the Android → Windows development path
 
 1. Launch the native Windows app and select **Choose folder and start receiver**.
-2. Paste its one-time `abot://pair?...` link into the Android app on the same private LAN.
-3. Select one Android document and offer it to Windows.
-4. Review the name, size, and SHA-256 on Windows, then accept or reject it.
+2. Tap **Scan QR** in Android, scan the Windows QR, and verify that both screens show the same six-digit code. The manual signed link remains available under the Windows disclosure.
+3. Approve the matching code on both devices, then select one Android document and offer it to Windows.
+4. Review the name, size, and SHA-256 on Windows, then accept or reject it. File bytes do not leave Android until acceptance.
 
-Windows Firewall may ask for private-network access. Do not enable public-network access. This is a development pairing flow: the high-entropy link must be handled like a one-time secret, and a fresh receiver session is required for each file.
+Windows Firewall may ask for private-network access. Do not enable public-network access. The invitation expires after five minutes and a fresh receiver session is required for each file.
 
 ## Security boundary
 
-Discovery never grants trust. The implemented one-file development path authenticates and encrypts its offer, decision, chunks, and completion acknowledgement with a one-use 256-bit secret. A receiver must explicitly accept metadata before Android opens the document for upload. Incoming names and sizes are validated, data is streamed to a temporary destination, and finalization occurs only after size and SHA-256 verification. Binding this channel to persistent Ed25519 device identities, secure identity storage, revocation, and replay caches remain pending.
+Discovery never grants trust. The signed invitation binds the private-LAN endpoint and one-use AES-256-GCM secret to the persistent Windows Ed25519 public key; Android verifies that signature and binds the offer to that same key. The Windows private key is stored in Windows Credential Manager, while Android stores only the approved public identity and supports revocation. A receiver must explicitly accept metadata before Android opens the document for upload. Full mutual device identity, tamper-resistant Android trust metadata, and replay caches remain pending.
 
 ## License
 

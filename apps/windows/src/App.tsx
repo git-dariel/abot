@@ -22,6 +22,10 @@ type ReceiverSnapshot = {
   state: string;
   endpoint?: string;
   pairingUri?: string;
+  pairingQrDataUrl?: string;
+  pairingCode?: string;
+  pairingApproved: boolean;
+  identityFingerprint?: string;
   offer?: IncomingOffer;
   savedPath?: string;
   error?: string;
@@ -40,7 +44,7 @@ export function App() {
   const [files, setFiles] = useState<SelectedFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
-  const [receiver, setReceiver] = useState<ReceiverSnapshot>({ state: "stopped" });
+  const [receiver, setReceiver] = useState<ReceiverSnapshot>({ state: "stopped", pairingApproved: false });
   const [receiverError, setReceiverError] = useState<string | null>(null);
   const [isStartingReceiver, setIsStartingReceiver] = useState(false);
   const nativeShell = isTauri();
@@ -101,6 +105,15 @@ export function App() {
     }
   };
 
+  const approvePairing = async () => {
+    setReceiverError(null);
+    try {
+      setReceiver(await invoke<ReceiverSnapshot>("approve_pairing"));
+    } catch (reason) {
+      setReceiverError(typeof reason === "string" ? reason : "The pairing approval could not be applied");
+    }
+  };
+
   return (
     <main>
       <header>
@@ -118,7 +131,7 @@ export function App() {
         <div>
           <p className="step">01 / RECEIVE</p>
           <h2 id="receive-heading">Receive from Android</h2>
-          <p>Choose the destination on this PC, then paste the one-time ABOT pairing link into the Android app.</p>
+          <p>Choose the destination, scan the signed QR code on Android, then compare the six-digit code on both devices.</p>
         </div>
         <div className="receiver-card" aria-live="polite">
           {receiver.state === "stopped" && (
@@ -128,21 +141,28 @@ export function App() {
           )}
           {receiver.state === "waiting" && receiver.pairingUri && (
             <>
-              <strong>Waiting for an encrypted offer</strong>
-              <p>On Android, paste this one-time pairing link:</p>
-              <code>{receiver.pairingUri}</code>
-              <small>Endpoint {receiver.endpoint}</small>
+              <strong>Scan with ABOT on Android</strong>
+              {receiver.pairingQrDataUrl && <img className="pairing-qr" src={receiver.pairingQrDataUrl} alt="Signed ABOT pairing QR code" />}
+              <p className="pairing-code" aria-label={`Pairing code ${receiver.pairingCode}`}>{receiver.pairingCode}</p>
+              <p>Confirm this same code appears on Android.</p>
+              <button type="button" onClick={() => void approvePairing()} disabled={receiver.pairingApproved}>
+                {receiver.pairingApproved ? "This PC approved" : "Code matches on Android"}
+              </button>
+              <details><summary>Manual pairing link</summary><code>{receiver.pairingUri}</code></details>
+              <small>Endpoint {receiver.endpoint} · Identity {receiver.identityFingerprint?.slice(0, 16)}…</small>
             </>
           )}
           {receiver.state === "offerPending" && receiver.offer && (
             <>
               <strong>Incoming file</strong>
+              <p className="pairing-code" aria-label={`Pairing code ${receiver.pairingCode}`}>{receiver.pairingCode}</p>
               <p className="incoming-name">{receiver.offer.name}</p>
               <small>{formatBytes(receiver.offer.size)} · SHA-256 {receiver.offer.sha256.slice(0, 16)}…</small>
               <div className="decision-actions">
-                <button type="button" onClick={() => void decideTransfer(true)}>Accept and receive</button>
+                <button type="button" onClick={() => void decideTransfer(true)} disabled={!receiver.pairingApproved}>Accept and receive</button>
                 <button className="secondary" type="button" onClick={() => void decideTransfer(false)}>Reject</button>
               </div>
+              {!receiver.pairingApproved && <button className="pairing-approval" type="button" onClick={() => void approvePairing()}>Code matches on Android</button>}
             </>
           )}
           {receiver.state === "receiving" && <strong>Receiving encrypted file…</strong>}

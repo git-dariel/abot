@@ -31,3 +31,7 @@ Connect Android sender to Windows receiver first. Use a Windows-generated one-us
 ## ADR-008: ABOT rebrand compatibility
 
 Rebrand product, package, bundle, UI, and artifact names to ABOT. The Android application ID becomes `app.abot.android` and the Windows bundle identifier becomes `app.abot.desktop`, so previous installations do not upgrade in place. Preserve v1 `AIRBRIDGE-*` authenticated-data bytes, the `_airbridge._tcp.local.` service type, and canonical `airbridge.local` schema IDs. Generate `abot://` pairing links while accepting both `abot://` and legacy `airbridge://` links.
+
+## ADR-009: Receiver-authenticated QR pairing
+
+Persist the Windows Ed25519 private identity in Windows Credential Manager and derive its stable device UUID from the public key. Put a fresh one-use transport secret inside a signed, five-minute QR invitation. Android verifies the signature locally, compares the same six-digit transcript code, and stores only the explicitly approved Windows public identity with a revoke action. Bind each encrypted offer to the invitation's receiver public key and require Windows pairing approval before transfer acceptance. This is receiver-authenticated pairing; Android private identity and mutual key agreement remain future work.

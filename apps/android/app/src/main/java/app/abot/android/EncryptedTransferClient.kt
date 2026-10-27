@@ -4,7 +4,6 @@ import android.content.ContentResolver
 import android.database.Cursor
 import android.net.Uri
 import android.provider.OpenableColumns
-import android.util.Base64
 import org.json.JSONObject
 import java.io.DataInputStream
 import java.io.DataOutputStream
@@ -33,12 +32,11 @@ internal object EncryptedTransferClient {
     fun send(
         resolver: ContentResolver,
         document: Uri,
-        pairingUri: String,
+        pairing: VerifiedPairing,
         onOfferSent: () -> Unit,
         onAccepted: () -> Unit,
         onProgress: (Long, Long) -> Unit,
     ): Result {
-        val pairing = parsePairingUri(pairingUri)
         val fileName = queryDisplayName(resolver, document)
         require(isSafeLeafName(fileName)) { "The selected file name is not portable or safe" }
         val digest = MessageDigest.getInstance("SHA-256")
@@ -63,6 +61,7 @@ internal object EncryptedTransferClient {
             .put("name", fileName)
             .put("size", fileSize)
             .put("sha256", digest.digest().toHex())
+            .put("receiverIdentityKey", pairing.identityKeyHex)
             .toString()
             .toByteArray(StandardCharsets.UTF_8)
 
@@ -167,23 +166,6 @@ internal object EncryptedTransferClient {
             .putLong(sequence)
             .array()
 
-    private fun parsePairingUri(value: String): Pairing {
-        val uri = Uri.parse(value.trim())
-        require(uri.scheme in setOf("abot", "airbridge") && uri.host == "pair") {
-            "Paste a valid ABOT pairing link"
-        }
-        val endpoint = requireNotNull(uri.getQueryParameter("endpoint")) { "Pairing endpoint is missing" }
-        val separator = endpoint.lastIndexOf(':')
-        require(separator > 0) { "Pairing endpoint is invalid" }
-        val host = endpoint.substring(0, separator)
-        val port = endpoint.substring(separator + 1).toIntOrNull()
-        require(port != null && port in 1..65535) { "Pairing port is invalid" }
-        val secretText = requireNotNull(uri.getQueryParameter("secret")) { "Pairing secret is missing" }
-        val secret = Base64.decode(secretText, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
-        require(secret.size == 32) { "Pairing secret is invalid" }
-        return Pairing(host, port, secret)
-    }
-
     private fun queryDisplayName(resolver: ContentResolver, uri: Uri): String {
         val cursor: Cursor? = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
         cursor.use {
@@ -203,5 +185,4 @@ internal object EncryptedTransferClient {
 
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 
-    private data class Pairing(val host: String, val port: Int, val secret: ByteArray)
 }

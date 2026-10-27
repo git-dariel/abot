@@ -8,4 +8,4 @@ From `apps/android`, run:
 .\gradlew.bat testDebugUnitTest lintDebug assembleDebug
 ```
 
-The current module uses Android's document picker and requests only `INTERNET` for direct local TCP transfer. It does not request camera, broad file-storage, nearby-device, notification, or foreground-service permissions. Start the Windows receiver, paste its one-time pairing link, select one document, and keep the app in the foreground while sending.
+The module uses Android's document picker and requests `INTERNET` plus `CAMERA`; the camera is used only by the on-device QR scanner. It does not request broad file-storage, nearby-device, notification, or foreground-service permissions. Start the Windows receiver, scan its QR, compare and approve the six-digit code on both devices, select one document, and keep the app in the foreground while sending. A signed manual link is available as a fallback.

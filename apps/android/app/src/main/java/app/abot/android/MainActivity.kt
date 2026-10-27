@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -40,6 +41,8 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 
 private data class AbotColors(
     val background: Color,
@@ -82,6 +85,9 @@ private fun AbotApp() {
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     var selectedUri by remember { mutableStateOf<Uri?>(null) }
     var pairingLink by remember { mutableStateOf("") }
+    var verifiedPairing by remember { mutableStateOf<VerifiedPairing?>(null) }
+    var pairingTrusted by remember { mutableStateOf(false) }
+    val trustedDevices = remember { TrustedDeviceStore(context) }
     var transferState by remember { mutableStateOf(TransferState.IDLE) }
     var statusMessage by remember { mutableStateOf("Select one file to begin.") }
     var progress by remember { mutableFloatStateOf(0f) }
@@ -100,6 +106,41 @@ private fun AbotApp() {
             progress = 0f
         }
     }
+    val scanner = rememberLauncherForActivityResult(ScanContract()) { result ->
+        result.contents?.let { scanned ->
+            try {
+                val pairing = PairingInvitationVerifier.verify(scanned)
+                pairingLink = scanned
+                verifiedPairing = pairing
+                pairingTrusted = trustedDevices.isTrusted(pairing)
+                statusMessage = "Signed invitation verified. Compare the six-digit code on Windows."
+            } catch (error: Exception) {
+                verifiedPairing = null
+                pairingTrusted = false
+                transferState = TransferState.FAILED
+                statusMessage = error.message ?: "The pairing QR code is invalid."
+            }
+        }
+    }
+
+    fun verifyPairingLink() {
+        try {
+            val pairing = PairingInvitationVerifier.parse(pairingLink)
+            verifiedPairing = pairing
+            pairingTrusted = trustedDevices.isTrusted(pairing)
+            statusMessage = if (pairing.isLegacy) {
+                "Legacy one-time link detected. It has no receiver identity or comparison code."
+            } else {
+                "Signed invitation verified. Compare the six-digit code on Windows."
+            }
+            if (transferState == TransferState.FAILED) transferState = TransferState.IDLE
+        } catch (error: Exception) {
+            verifiedPairing = null
+            pairingTrusted = false
+            transferState = TransferState.FAILED
+            statusMessage = error.message ?: "The pairing link is invalid."
+        }
+    }
 
     fun updateState(state: TransferState, message: String, value: Float? = null) {
         mainHandler.post {
@@ -111,6 +152,7 @@ private fun AbotApp() {
 
     fun sendFile() {
         val document = selectedUri ?: return
+        val pairing = verifiedPairing?.takeIf { pairingTrusted } ?: return
         transferState = TransferState.TRANSFER_OFFERED
         statusMessage = "Hashing the file and preparing an encrypted offer…"
         progress = 0f
@@ -119,7 +161,7 @@ private fun AbotApp() {
                 val result = EncryptedTransferClient.send(
                     resolver = context.contentResolver,
                     document = document,
-                    pairingUri = pairingLink,
+                    pairing = pairing,
                     onOfferSent = {
                         updateState(
                             TransferState.AWAITING_REMOTE_CONFIRMATION,
@@ -202,7 +244,11 @@ private fun AbotApp() {
                         }
                         OutlinedTextField(
                             value = pairingLink,
-                            onValueChange = { pairingLink = it },
+                            onValueChange = {
+                                pairingLink = it
+                                verifiedPairing = null
+                                pairingTrusted = false
+                            },
                             enabled = !isBusy,
                             label = { Text("Windows pairing link") },
                             placeholder = { Text("abot://pair?…") },
@@ -210,9 +256,84 @@ private fun AbotApp() {
                             minLines = 2,
                             modifier = Modifier.fillMaxWidth(),
                         )
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                            Button(
+                                onClick = {
+                                    scanner.launch(
+                                        ScanOptions()
+                                            .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                                            .setPrompt("Scan the ABOT QR code on Windows")
+                                            .setBeepEnabled(false)
+                                            .setOrientationLocked(false),
+                                    )
+                                },
+                                enabled = !isBusy,
+                                modifier = Modifier.weight(1f),
+                            ) { Text("Scan QR", fontWeight = FontWeight.Bold) }
+                            OutlinedButton(
+                                onClick = ::verifyPairingLink,
+                                enabled = pairingLink.isNotBlank() && !isBusy,
+                                modifier = Modifier.weight(1f),
+                            ) { Text("Verify link", fontWeight = FontWeight.Bold) }
+                        }
+                        verifiedPairing?.let { pairing ->
+                            Surface(shape = RoundedCornerShape(16.dp), color = colors.background, modifier = Modifier.fillMaxWidth()) {
+                                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(pairing.displayName, fontWeight = FontWeight.Bold)
+                                    if (!pairing.isLegacy) {
+                                        Text(
+                                            pairing.comparisonCode,
+                                            color = colors.accent,
+                                            fontSize = 36.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            letterSpacing = 5.sp,
+                                        )
+                                        Text("Compare this code with Windows before trusting.", color = colors.muted, fontSize = 12.sp)
+                                    } else {
+                                        Text("Compatibility mode: receiver identity is not verified.", color = colors.error, fontSize = 12.sp)
+                                    }
+                                    if (pairingTrusted && !pairing.isLegacy) {
+                                        Text("Trusted receiver identity", color = colors.accent, fontWeight = FontWeight.Bold)
+                                        OutlinedButton(
+                                            onClick = {
+                                                trustedDevices.revoke(pairing.deviceId)
+                                                pairingTrusted = false
+                                                statusMessage = "Trust revoked. Confirm the code again before sending."
+                                            },
+                                            enabled = !isBusy,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        ) { Text("Revoke trust") }
+                                    } else if (!pairing.isLegacy) {
+                                        Button(
+                                            onClick = {
+                                                try {
+                                                    trustedDevices.trust(pairing)
+                                                    pairingTrusted = true
+                                                    statusMessage = "Windows identity trusted on this phone."
+                                                } catch (error: IllegalArgumentException) {
+                                                    transferState = TransferState.FAILED
+                                                    statusMessage = error.message ?: "This identity could not be trusted."
+                                                }
+                                            },
+                                            enabled = !isBusy,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        ) { Text("Code matches — trust this PC", fontWeight = FontWeight.Bold) }
+                                    } else if (!pairingTrusted) {
+                                        Button(
+                                            onClick = {
+                                                pairingTrusted = true
+                                                statusMessage = "Legacy link approved for this one transfer only."
+                                            },
+                                            enabled = !isBusy,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        ) { Text("Use legacy link once", fontWeight = FontWeight.Bold) }
+                                    }
+                                }
+                            }
+                        }
                         Button(
                             onClick = ::sendFile,
-                            enabled = selectedUri != null && pairingLink.isNotBlank() && !isBusy,
+                            enabled = selectedUri != null && verifiedPairing != null && pairingTrusted && !isBusy,
                             colors = ButtonDefaults.buttonColors(containerColor = colors.accent, contentColor = colors.background),
                             modifier = Modifier.fillMaxWidth(),
                         ) {

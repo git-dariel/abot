@@ -35,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,13 +73,18 @@ private fun AbotApp() {
     val context = LocalContext.current
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val trustedDevices = remember { TrustedDeviceStore(context) }
-    var selectedUri by remember { mutableStateOf<Uri?>(null) }
-    var pairingLink by remember { mutableStateOf("") }
-    var verifiedPairing by remember { mutableStateOf<VerifiedPairing?>(null) }
-    var pairingTrusted by remember { mutableStateOf(false) }
-    var showManualLink by remember { mutableStateOf(false) }
+    var selectedUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var pairingLink by rememberSaveable { mutableStateOf("") }
+    var verifiedPairingLink by rememberSaveable { mutableStateOf<String?>(null) }
+    val verifiedPairing = remember(verifiedPairingLink) {
+        verifiedPairingLink?.let { link ->
+            runCatching { PairingInvitationVerifier.parse(link) }.getOrNull()
+        }
+    }
+    var pairingTrusted by rememberSaveable { mutableStateOf(false) }
+    var showManualLink by rememberSaveable { mutableStateOf(false) }
     var transferState by remember { mutableStateOf(TransferState.IDLE) }
-    var statusMessage by remember { mutableStateOf("Scan the QR code shown on Windows.") }
+    var statusMessage by rememberSaveable { mutableStateOf("Scan the QR code shown on Windows.") }
     var progress by remember { mutableFloatStateOf(0f) }
     val isBusy = transferState in setOf(
         TransferState.TRANSFER_OFFERED,
@@ -90,7 +96,7 @@ private fun AbotApp() {
 
     fun applyPairing(pairing: VerifiedPairing, link: String) {
         pairingLink = link
-        verifiedPairing = pairing
+        verifiedPairingLink = link
         pairingTrusted = trustedDevices.isTrusted(pairing)
         showManualLink = false
         statusMessage = if (pairing.isLegacy) {
@@ -114,7 +120,7 @@ private fun AbotApp() {
             try {
                 applyPairing(PairingInvitationVerifier.verify(scanned), scanned)
             } catch (error: Exception) {
-                verifiedPairing = null
+                verifiedPairingLink = null
                 pairingTrusted = false
                 transferState = TransferState.FAILED
                 statusMessage = error.message ?: "The pairing QR code is invalid."
@@ -126,7 +132,7 @@ private fun AbotApp() {
         try {
             applyPairing(PairingInvitationVerifier.parse(pairingLink), pairingLink)
         } catch (error: Exception) {
-            verifiedPairing = null
+            verifiedPairingLink = null
             pairingTrusted = false
             transferState = TransferState.FAILED
             statusMessage = error.message ?: "The pairing link is invalid."
@@ -224,13 +230,13 @@ private fun AbotApp() {
                                 .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
                                 .setPrompt("Scan the ABOT QR code on Windows")
                                 .setBeepEnabled(false)
-                                .setOrientationLocked(false),
+                                .setOrientationLocked(true),
                         )
                     },
                     onToggleManual = { showManualLink = !showManualLink },
                     onLinkChange = {
                         pairingLink = it
-                        verifiedPairing = null
+                        verifiedPairingLink = null
                         pairingTrusted = false
                     },
                     onVerifyLink = ::verifyPairingLink,

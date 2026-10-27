@@ -14,6 +14,7 @@
 - One-file Android-to-Windows private-LAN transport with a one-use pairing link, encrypted/authenticated control and data frames, explicit Windows acceptance, Android chunk streaming, and Windows verified atomic finalization.
 - Identity-bound pairing UI: Windows Credential Manager-backed Ed25519 identity, signed/expiring QR rendering, local Android QR signature verification, six-digit comparison on both devices, explicit approval on both devices, Android public-identity trust/revocation, and receiver-key-bound offers.
 - Android pairing UI uses a compact black-and-white, vertically scrollable two-step layout; scanned QR payloads are hidden from the form, manual link entry is opt-in, and system/keyboard insets remain scrollable.
+- Android preserves the verified pairing link, comparison-code card, trust state, and status text across Activity recreation; QR scanning is orientation-locked to prevent camera-return resets.
 - Product rebranded to ABOT (`abot.` visual mark and “Abot mo, salo ko.” tagline), including Android/Windows package metadata, adaptive Android icon/splash resources, desktop assets, and dark/light design tokens while preserving v1 wire compatibility identifiers.
 
 ## Verified
@@ -31,6 +32,7 @@
 - ABOT rebrand checks passed: Android manifest resolves to `app.abot.android`; Android forced unit/APK build and lint pass; Tauri produces `abot-windows.exe` plus ABOT NSIS/MSI bundles; the native process launch smoke and local browser visual inspection pass.
 - Signed-pairing checks pass: Rust workspace tests/Clippy, Windows TypeScript/build, Android signed-invitation unit test/debug APK/lint, and source diff checks.
 - Android scroll/contrast fix passes `testDebugUnitTest`, `assembleDebug`, and `lintDebug`.
+- Android pairing-state lifecycle fix passes `testDebugUnitTest`, `assembleDebug`, and `lintDebug`.
 - User-reported observation: the earlier manual-link flow worked on a real phone and laptop. Exact device/OS details, hashes, duration, and firewall observations were not captured, so this is not a formal hardware acceptance result.
 
 ## Pending

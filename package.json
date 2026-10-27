@@ -1,0 +1,10 @@
+{
+  "name": "airbridge",
+  "private": true,
+  "packageManager": "pnpm@10.22.0",
+  "scripts": {
+    "test": "pnpm --filter @airbridge/protocol test",
+    "typecheck": "pnpm --recursive --if-present typecheck",
+    "build:windows-ui": "pnpm --filter @airbridge/windows build"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airbridge.local/schema/v1/envelope.schema.json",
+  "title": "AirBridge protocol envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "messageId", "transferId", "sentAt", "type", "payload"],
+  "properties": {
+    "protocolVersion": { "const": "1.0" },
+    "messageId": { "type": "string", "format": "uuid" },
+    "transferId": { "type": "string", "format": "uuid" },
+    "sentAt": { "type": "string", "format": "date-time" },
+    "type": {
+      "enum": [
+        "transfer.offer",
+        "transfer.accept",
+        "transfer.reject",
+        "transfer.cancel",
+        "transfer.progress",
+        "transfer.complete",
+        "transfer.failed"
+      ]
+    },
+    "payload": { "type": "object" }
+  }
+}

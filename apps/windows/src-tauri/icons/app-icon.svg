@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="AirBridge">
+  <rect width="512" height="512" rx="112" fill="#071711"/>
+  <path d="M104 310c39-70 90-105 152-105s113 35 152 105" fill="none" stroke="#76e9b3" stroke-width="42" stroke-linecap="round"/>
+  <path d="M151 349h210" fill="none" stroke="#edf9f2" stroke-width="34" stroke-linecap="round"/>
+  <circle cx="256" cy="169" r="35" fill="#76e9b3"/>
+</svg>

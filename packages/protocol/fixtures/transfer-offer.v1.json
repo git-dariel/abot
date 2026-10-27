@@ -1,0 +1,20 @@
+{
+  "protocolVersion": "1.0",
+  "messageId": "fd0ecacd-934d-4d1e-b2ca-ab5a67fc2ca8",
+  "transferId": "9ac3ee87-48d8-409e-b4b5-e8a7c6d235b4",
+  "sentAt": "2026-10-27T10:00:00Z",
+  "type": "transfer.offer",
+  "payload": {
+    "senderDeviceId": "00c9294b-8a40-4d3e-9ecb-eae678a2f7d6",
+    "totalBytes": 12,
+    "files": [
+      {
+        "id": "3f2c63ce-f2cc-46c9-af1f-0a02fb2a283e",
+        "name": "hello.txt",
+        "size": 12,
+        "sha256": "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447",
+        "mediaType": "text/plain"
+      }
+    ]
+  }
+}

@@ -9,15 +9,16 @@
 - [x] Establish and verify the Gradle wrapper with Android Studio's bundled JDK 21.
 - [x] Compile the Windows Tauri shell and run a bounded launch smoke test.
 - [x] Compile the Android Compose shell and produce a debug APK.
-- [ ] Launch and visually inspect the Android shell on an emulator or device.
+- [x] Launch and visually inspect the Android pairing shell on a real device; QR scan, scrolling, high-contrast controls, comparison code, and trust action were confirmed by the project owner.
 - [x] Implement mDNS discovery APIs and validated manual-address fallback.
 - [x] Implement signed, expiring QR invitation and short-code identity binding.
 - [ ] Persist device identities in platform secure storage and connect mutual pairing over the network.
+- [ ] Add Android private identity, mutual authentication, and trusted-device reconnection through untrusted mDNS discovery so repeat transfers do not require a QR scan.
 - [ ] Connect explicit offer/accept/reject to real transfer in both directions.
 - [x] Connect one-file Android-to-Windows offer/accept/reject and encrypted verified streaming in platform code.
 - [ ] Add cancellation and persistent resume checkpoints.
 - [ ] Integrate MediaPipe gesture input on Android and Windows.
-- [ ] Run real-device cross-platform acceptance tests.
+- [ ] Record a signed-QR Android-to-Windows acceptance run with device/OS details, file size, matching SHA-256 hashes, duration, rejection, expiry, revocation, and Windows Firewall behavior.
 - [x] Produce unsigned development APK, NSIS, and MSI artifacts with checksums.
 - [x] Rebrand product, platform identities, packages, UI tokens, icons, artifacts, and documentation to ABOT while preserving v1 compatibility identifiers.
 - [ ] Produce signed release artifacts where credentials permit.

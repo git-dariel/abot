@@ -26,7 +26,8 @@
 - Implemented UI fix: the Android pairing flow is now a compact black-and-white, vertically scrollable two-step screen. The scanned payload is hidden after verification, while manual entry remains an opt-in fallback.
 - Implemented lifecycle fix: verified QR and trust UI state survives Activity recreation when returning from the orientation-locked camera scanner.
 - Tested UI fix: Android unit tests, debug APK assembly, and lint pass.
-- Pending: user/device confirmation of the scroll and contrast fix, Android private identity and mutual authenticated key agreement, tamper-resistant Android trust metadata, replay cache, discovery UI integration, and signed-QR real-hardware validation.
+- User-verified: on a real Android device, QR scanning returns to the scrollable high-contrast screen with the comparison code and trust action still visible.
+- Pending: recorded signed-QR file-transfer validation with matching hashes and environment details, Android private identity and mutual authenticated key agreement, tamper-resistant Android trust metadata, replay cache, and trusted-device discovery/reconnection UI.
 
 ## Milestone 4 — Android to Windows transfer
 

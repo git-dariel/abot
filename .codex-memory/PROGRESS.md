@@ -33,8 +33,9 @@
 - Signed-pairing checks pass: Rust workspace tests/Clippy, Windows TypeScript/build, Android signed-invitation unit test/debug APK/lint, and source diff checks.
 - Android scroll/contrast fix passes `testDebugUnitTest`, `assembleDebug`, and `lintDebug`.
 - Android pairing-state lifecycle fix passes `testDebugUnitTest`, `assembleDebug`, and `lintDebug`.
+- User-verified on a real Android device: QR scanning returns to the scrollable black-and-white screen with the comparison code and trust action remaining visible.
 - User-reported observation: the earlier manual-link flow worked on a real phone and laptop. Exact device/OS details, hashes, duration, and firewall observations were not captured, so this is not a formal hardware acceptance result.
 
 ## Pending
 
-- User retest of the Android scroll/contrast fix and recorded signed-QR Android-to-Windows hardware validation, Windows-to-Android transfer, Android private identity and mutual key agreement, tamper-resistant trust metadata, replay cache, discovery UI integration, multi-file/cancellation/resume, gestures, and signed release artifacts.
+- Recorded signed-QR Android-to-Windows file-transfer validation with hashes and environment details, trusted-device reconnection through untrusted discovery, Windows-to-Android transfer, Android private identity and mutual key agreement, tamper-resistant trust metadata, replay cache, multi-file/cancellation/resume, gestures, and signed release artifacts.

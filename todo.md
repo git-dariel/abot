@@ -19,4 +19,5 @@
 - [ ] Integrate MediaPipe gesture input on Android and Windows.
 - [ ] Run real-device cross-platform acceptance tests.
 - [x] Produce unsigned development APK, NSIS, and MSI artifacts with checksums.
+- [x] Rebrand product, platform identities, packages, UI tokens, icons, artifacts, and documentation to ABOT while preserving v1 compatibility identifiers.
 - [ ] Produce signed release artifacts where credentials permit.

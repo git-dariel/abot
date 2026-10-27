@@ -1,6 +1,6 @@
 # System Design
 
-AirBridge has separate platform applications joined by a versioned protocol. Each device independently handles selection, consent, camera inference, secure storage, and lifecycle.
+ABOT has separate platform applications joined by a versioned protocol. Each device independently handles selection, consent, camera inference, secure storage, and lifecycle.
 
 ## Control plane
 

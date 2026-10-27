@@ -15,7 +15,7 @@ Message IDs are single-use within a bounded replay window. Transfer and file IDs
 
 ## Encrypted single-file transport (implemented development slice)
 
-The first connected path is Android sender to Windows receiver over TCP on a private LAN. Windows generates a random 32-byte one-use secret and publishes it with the selected local endpoint in an `airbridge://pair` link. The link is transferred out of band by the user and is never advertised through discovery.
+The first connected path is Android sender to Windows receiver over TCP on a private LAN. Windows generates a random 32-byte one-use secret and publishes it with the selected local endpoint in an `abot://pair` link. The link is transferred out of band by the user and is never advertised through discovery. Android also accepts the legacy `airbridge://` scheme during migration.
 
 Every control or data frame is authenticated and encrypted with AES-256-GCM. Offer, decision, data, and completion frames use separate associated-data domains. Data frames also bind the transfer UUID and monotonically increasing sequence number. Plaintext chunks are limited to 64 KiB, so neither peer buffers the complete file.
 
@@ -27,7 +27,7 @@ This one-use pre-shared-secret channel is an initial transport, not durable devi
 
 The JSON QR payload contains protocol version, device UUID, display name, socket endpoint, millisecond expiry, a 32-byte random nonce, an Ed25519 public identity key, and an Ed25519 signature. Binary fields are lowercase hexadecimal.
 
-The signature covers the domain-separated `AIRBRIDGE-PAIRING\0` transcript followed by big-endian version, UUID bytes, length-prefixed UTF-8 display name and endpoint, big-endian expiry, nonce, and public key. Peers reject malformed, expired, unsupported-version, or invalid-signature invitations before displaying the comparison code. This authenticates the scanned invitation; transport binding and persistent trust storage remain pending.
+The signature covers the domain-separated `AIRBRIDGE-PAIRING\0` transcript followed by big-endian version, UUID bytes, length-prefixed UTF-8 display name and endpoint, big-endian expiry, nonce, and public key. That pre-rebrand byte string is deliberately preserved as a v1 compatibility identifier. Peers reject malformed, expired, unsupported-version, or invalid-signature invitations before displaying the comparison code. This authenticates the scanned invitation; transport binding and persistent trust storage remain pending.
 
 ## State machine
 

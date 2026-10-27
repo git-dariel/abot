@@ -1,8 +1,8 @@
-# AirBridge Repository Instructions
+# ABOT Repository Instructions
 
 Follow the user-provided Codex general instructions. In addition:
 
-- Keep AirBridge local-first; do not introduce a required cloud service or account.
+- Keep ABOT local-first; do not introduce a required cloud service or account.
 - A gesture only arms or confirms a transfer. Never imply that a hand is tracked between cameras.
 - Build the conventional, explicitly accepted file-transfer path before gesture controls.
 - Never transmit file bytes until the receiving user accepts the offer.

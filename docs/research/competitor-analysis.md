@@ -6,7 +6,7 @@
 - **Observation:** the published Windows experience relies on nearby Wi-Fi and Bluetooth and states that transfers use end-to-end encryption; Windows 10/11 64-bit support has hardware/implementation constraints.
 - **Evidence:** public product requirements and FAQ.
 - **Confidence:** high for documented product behavior; internal protocol details were not inspected.
-- **Impact:** AirBridge needs clear capability checks and must not promise universal support merely from OS version.
+- **Impact:** ABOT needs clear capability checks and must not promise universal support merely from OS version.
 
 ## Microsoft Phone Link
 
@@ -22,7 +22,7 @@
 - **Observation:** the documented OneHop flow requires Huawei ecosystem capabilities and physical NFC-area interaction; it is not evidence of camera-based continuous hand tracking.
 - **Evidence:** Huawei's public support workflow.
 - **Confidence:** high for the documented flow; no proprietary implementation was examined.
-- **Impact:** AirBridge must be independently implemented and use explicit camera gesture states plus ordinary controls.
+- **Impact:** ABOT must be independently implemented and use explicit camera gesture states plus ordinary controls.
 
 ## LocalSend
 
@@ -30,4 +30,4 @@
 - **Observation:** metadata preparation before upload, receiver decision, streaming HTTP, per-file token, hash verification, and discovery fallbacks are useful public patterns. Published advisories also show why unauthenticated discovery and unsafe filenames cannot be trusted.
 - **Evidence:** open protocol v2.2 and GitHub security advisories.
 - **Confidence:** high for public protocol/advisory content.
-- **Impact:** AirBridge separates discovery from trust, requires identity-bound pairing, validates filenames, and sends no bytes before acceptance.
+- **Impact:** ABOT separates discovery from trust, requires identity-bound pairing, validates filenames, and sends no bytes before acceptance.

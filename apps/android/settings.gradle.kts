@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "AirBridgeAndroid"
+rootProject.name = "ABOTAndroid"
 include(":app")

@@ -104,21 +104,21 @@ export function App() {
   return (
     <main>
       <header>
-        <a className="brand" href="#top" aria-label="AirBridge home">AirBridge</a>
+        <a className="brand" href="#top" aria-label="ABOT home">abot.</a>
         <span className="status"><span aria-hidden="true" /> {nativeShell ? "Native shell ready" : "Browser development mode"}</span>
       </header>
 
       <section className="hero" id="top">
-        <p className="eyebrow">LOCAL-FIRST FILE TRANSFER</p>
-        <h1>Move files <em>naturally.</em></h1>
-        <p className="lede">Send one file from Android over an encrypted local connection, with approval on this PC before any file bytes move.</p>
+        <p className="eyebrow">GESTURE-POWERED FILE SHARING</p>
+        <h1>Abot mo, <em>salo ko.</em></h1>
+        <p className="lede">Local-first file sharing for Android and Windows. Send one file over an encrypted connection, with approval on this PC before any file bytes move.</p>
       </section>
 
       <section className="receiver" aria-labelledby="receive-heading">
         <div>
           <p className="step">01 / RECEIVE</p>
           <h2 id="receive-heading">Receive from Android</h2>
-          <p>Choose the destination on this PC, then paste the one-time pairing link into the Android app.</p>
+          <p>Choose the destination on this PC, then paste the one-time ABOT pairing link into the Android app.</p>
         </div>
         <div className="receiver-card" aria-live="polite">
           {receiver.state === "stopped" && (
@@ -171,7 +171,7 @@ export function App() {
         <div>
           <p className="step">01 / SELECT</p>
           <h2 id="send-heading">Choose what to send</h2>
-          <p>The receiver must accept the offer before AirBridge sends any bytes.</p>
+          <p>The receiver must accept the offer before ABOT sends any bytes.</p>
         </div>
 
         <button className="drop-zone" type="button" onClick={chooseFiles} disabled={isSelecting}>

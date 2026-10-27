@@ -1,7 +1,7 @@
-use airbridge_security::{
+use abot_security::{
     decrypt_frame, encrypt_frame, generate_session_token, AEAD_NONCE_BYTES, SESSION_KEY_BYTES,
 };
-use airbridge_transfer_core::{
+use abot_transfer_core::{
     is_safe_leaf_name, parse_sha256, receive_verified, sha256_file, ExpectedFile,
 };
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -18,6 +18,7 @@ use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
 
 const MAGIC: &[u8; 4] = b"ABR1";
+// These v1 wire domains intentionally retain their pre-ABOT bytes for compatibility.
 const OFFER_AAD: &[u8] = b"AIRBRIDGE-OFFER-V1";
 const DECISION_AAD: &[u8] = b"AIRBRIDGE-DECISION-V1";
 const COMPLETE_AAD: &[u8] = b"AIRBRIDGE-COMPLETE-V1";
@@ -146,7 +147,7 @@ fn start_receiver(
     let endpoint = format!("{local_ip}:{port}");
     let secret = generate_session_token();
     let pairing_uri = format!(
-        "airbridge://pair?endpoint={endpoint}&secret={}",
+        "abot://pair?endpoint={endpoint}&secret={}",
         URL_SAFE_NO_PAD.encode(secret)
     );
     let snapshot = ReceiverSnapshot {
@@ -536,7 +537,7 @@ pub fn run() {
             decide_transfer
         ])
         .run(tauri::generate_context!())
-        .expect("failed to run AirBridge");
+        .expect("failed to run ABOT");
 }
 
 #[cfg(test)]

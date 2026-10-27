@@ -10,7 +10,7 @@ importers:
 
   apps/windows:
     dependencies:
-      '@airbridge/protocol':
+      '@abot/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
       '@tauri-apps/api':

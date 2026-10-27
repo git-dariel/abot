@@ -23,7 +23,7 @@ const sendRequest = (port, path, body = Buffer.alloc(0), headers = {}) =>
   });
 
 test("synthetic peer requires acceptance and finalizes verified streamed bytes", async (context) => {
-  const destination = await mkdtemp(join(tmpdir(), "airbridge-transfer-"));
+  const destination = await mkdtemp(join(tmpdir(), "abot-transfer-"));
   context.after(() => rm(destination, { recursive: true, force: true }));
 
   let offer;

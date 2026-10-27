@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use thiserror::Error;
 use uuid::Uuid;
 
+// Preserved from the pre-ABOT v1 protocol so renamed and legacy peers discover each other.
 pub const SERVICE_TYPE: &str = "_airbridge._tcp.local.";
 
 /// A discovery record is untrusted input. It may be displayed as a candidate
@@ -81,7 +82,7 @@ impl ServiceAdvertisement {
         candidate.validate(protocol_major)?;
 
         let daemon = ServiceDaemon::new()?;
-        let instance_name = format!("airbridge-{device_id}");
+        let instance_name = format!("abot-{device_id}");
         let host_name = format!("{instance_name}.local.");
         let properties = HashMap::from([
             ("device_id".to_owned(), device_id.to_string()),

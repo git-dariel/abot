@@ -1,4 +1,4 @@
-use airbridge_security::{pairing_code, verify_identity_signature, DeviceIdentity};
+use abot_security::{pairing_code, verify_identity_signature, DeviceIdentity};
 use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
@@ -273,7 +273,7 @@ mod tests {
         let invitation = PairingInvitation::create(
             &identity,
             Uuid::new_v4(),
-            "AirBridge PC".into(),
+            "ABOT PC".into(),
             "192.168.1.10:47741".parse().unwrap(),
             20_000,
         )

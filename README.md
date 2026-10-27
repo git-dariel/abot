@@ -1,8 +1,8 @@
-# AirBridge
+# ABOT
 
-**Move files naturally.**
+**Abot mo, salo ko.**
 
-AirBridge is an independently implemented, local-first file-transfer project for Android phones and Windows 10/11 PCs. Its target experience combines conventional, accessible transfer controls with optional camera-detected hand gestures. Gestures coordinate user intent; they do not move data or track a hand between devices.
+Gesture-powered, local-first file sharing between Android phones and Windows computers. ABOT combines conventional, accessible transfer controls with optional camera-detected hand gestures. Gestures coordinate user intent; they do not move data or track a hand between devices.
 
 ## Current status
 
@@ -64,7 +64,7 @@ These commands validate components, not the end-to-end acceptance criteria. Real
 ## Try the Android → Windows development path
 
 1. Launch the native Windows app and select **Choose folder and start receiver**.
-2. Paste its one-time `airbridge://pair?...` link into the Android app on the same private LAN.
+2. Paste its one-time `abot://pair?...` link into the Android app on the same private LAN.
 3. Select one Android document and offer it to Windows.
 4. Review the name, size, and SHA-256 on Windows, then accept or reject it.
 

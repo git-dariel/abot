@@ -1,5 +1,5 @@
 [package]
-name = "airbridge-discovery"
+name = "abot-discovery"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true

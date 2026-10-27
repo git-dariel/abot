@@ -1,12 +1,12 @@
 [package]
-name = "airbridge-windows"
+name = "abot-windows"
 version = "0.1.0"
 edition = "2021"
 license.workspace = true
 rust-version.workspace = true
 
 [lib]
-name = "airbridge_windows_lib"
+name = "abot_windows_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -15,8 +15,8 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
-airbridge-security = { path = "../../../crates/security" }
-airbridge-transfer-core = { path = "../../../crates/transfer-core" }
+abot-security = { path = "../../../crates/security" }
+abot-transfer-core = { path = "../../../crates/transfer-core" }
 base64.workspace = true
 hex.workspace = true
 local-ip-address = "0.6"

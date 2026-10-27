@@ -1,4 +1,4 @@
-package dev.airbridge.android
+package app.abot.android
 
 enum class TransferState {
     IDLE,

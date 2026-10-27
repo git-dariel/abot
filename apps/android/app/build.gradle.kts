@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "dev.airbridge.android"
+    namespace = "app.abot.android"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "dev.airbridge.android"
+        applicationId = "app.abot.android"
         minSdk = 26
         targetSdk = 35
         versionCode = 1

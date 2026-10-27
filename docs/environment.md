@@ -27,7 +27,7 @@ The Android Gradle build installed the accepted/licensed Android 35 platform rev
 - **Registration:** REA 6.8.0 is registered in the Codex configuration and shared workflow skill version 49 is installed; doctor reports the selected Codex/skill scope healthy.
 - **Catalog:** 175 CLI commands, 229 MCP tools, and 6 prompts; progress and cancellation are supported.
 - **Current session:** a Codex restart is still required before the newly registered MCP tools are exposed here.
-- **Working provider:** the safe artifact-graph provider inspected the owned AirBridge APK and Windows PE without executing them.
+- **Working provider:** the safe artifact-graph provider inspected the owned pre-rebrand APK and Windows PE without executing them.
 - **Unavailable provider:** `inspect-android-package` failed closed because `REA_JADX_MCP_JAR` is not configured. Hopper, Ghidra, IDA, and Kuna are also not configured.
 - **Schema check:** `inspect-android-package` requires one string `path` and rejects additional properties at the MCP schema level; the CLI exposes that path positionally.
 - **Runtime permissions:** static artifact inspection reads caller-selected local files and may create bounded local evidence; provider capability output reports operation-specific side effects. No proprietary third-party artifact was inspected.
@@ -40,4 +40,4 @@ Official setup documentation: <https://github.com/morluto/rea/blob/main/docs/ins
 2. If deep APK declaration/class inspection is required, configure a trusted caller-supplied `jadx-headless-mcp` 0.7.1 JAR and rerun doctor.
 3. Install a native analysis engine only for a specific authorized investigation that needs it.
 
-REA evidence is limited to AirBridge's own generated artifacts and the explicit availability checks above.
+REA evidence is limited to the project's own generated artifacts and the explicit availability checks above.

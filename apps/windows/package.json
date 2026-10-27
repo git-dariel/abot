@@ -1,5 +1,5 @@
 {
-  "name": "@airbridge/windows",
+  "name": "@abot/windows",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@airbridge/protocol": "workspace:*",
+    "@abot/protocol": "workspace:*",
     "@tauri-apps/api": "2.12.4",
     "react": "19.2.0",
     "react-dom": "19.2.0"

@@ -1,12 +1,12 @@
 [package]
-name = "airbridge-pairing"
+name = "abot-pairing"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-airbridge-security = { path = "../security" }
+abot-security = { path = "../security" }
 hex.workspace = true
 rand.workspace = true
 serde.workspace = true

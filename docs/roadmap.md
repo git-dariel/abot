@@ -34,3 +34,10 @@
 ## Milestones 5–10
 
 Reverse-direction transfer, durable pairing, gestures, polished UI, reliability testing, and signed releases remain pending. No real cross-device acceptance criterion has passed yet.
+
+## Branding milestone — ABOT
+
+- Implemented: ABOT/`abot.` product identity, “Abot mo, salo ko.” tagline, `app.abot.android` Android identity and Kotlin namespace, `app.abot.desktop` Tauri identity, ABOT Rust/npm package names, `abot://` generated pairing links, desktop and Android icon/splash assets, and shared dark/light design tokens.
+- Tested: full Rust/Clippy suite, protocol tests, TypeScript checks, Windows UI production build, Android forced unit/APK build and lint, Tauri EXE/NSIS/MSI packaging, three-second native launch smoke, manifest inspection confirming `app.abot.android`, icon rendering, and local browser visual inspection.
+- Compatibility: v1 `AIRBRIDGE-*` wire domains, `_airbridge._tcp.local.` discovery, `airbridge.local` schema IDs, and legacy `airbridge://` input remain deliberately supported. Old platform application IDs do not upgrade in place.
+- Pending: native UI capture was unavailable because the Computer Use Windows pipe was not present; Android emulator/device visual inspection and cross-device hardware validation remain pending.

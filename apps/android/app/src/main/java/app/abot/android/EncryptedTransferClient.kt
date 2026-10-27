@@ -1,4 +1,4 @@
-package dev.airbridge.android
+package app.abot.android
 
 import android.content.ContentResolver
 import android.database.Cursor
@@ -21,6 +21,7 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
 internal object EncryptedTransferClient {
+    // These v1 wire domains intentionally retain their pre-ABOT bytes for compatibility.
     private val offerAad = "AIRBRIDGE-OFFER-V1".toByteArray(StandardCharsets.UTF_8)
     private val decisionAad = "AIRBRIDGE-DECISION-V1".toByteArray(StandardCharsets.UTF_8)
     private val completeAad = "AIRBRIDGE-COMPLETE-V1".toByteArray(StandardCharsets.UTF_8)
@@ -168,7 +169,9 @@ internal object EncryptedTransferClient {
 
     private fun parsePairingUri(value: String): Pairing {
         val uri = Uri.parse(value.trim())
-        require(uri.scheme == "airbridge" && uri.host == "pair") { "Paste a valid AirBridge pairing link" }
+        require(uri.scheme in setOf("abot", "airbridge") && uri.host == "pair") {
+            "Paste a valid ABOT pairing link"
+        }
         val endpoint = requireNotNull(uri.getQueryParameter("endpoint")) { "Pairing endpoint is missing" }
         val separator = endpoint.lastIndexOf(':')
         require(separator > 0) { "Pairing endpoint is invalid" }

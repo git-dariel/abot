@@ -1,6 +1,7 @@
 # Known Limitations
 
 - The Windows native app builds and passes a process-level launch smoke test; the Android debug app builds. Neither UI has been visually inspected or exercised on an Android emulator/device in this environment.
+- The Android application ID changed from `dev.airbridge.android` to `app.abot.android`, and the Windows bundle identifier changed from `dev.airbridge.desktop` to `app.abot.desktop`. Existing AirBridge installations are separate applications and do not upgrade in place.
 - Android-to-Windows supports one file per manually paired receiver session. Windows-to-Android, multi-file offers, automatic discovery UI, cancellation, and resume are not connected.
 - The connected AES-256-GCM channel uses a one-use high-entropy pairing secret, but it is not yet bound to the Ed25519 device identities. Secure identity persistence, replay caches, and trust revocation are pending.
 - Resume, cancellation plumbing, rate limits, and replay cache are pending.

@@ -3,6 +3,72 @@
 version = 4
 
 [[package]]
+name = "abot-discovery"
+version = "0.1.0"
+dependencies = [
+ "mdns-sd",
+ "serde",
+ "thiserror 2.0.21",
+ "uuid",
+]
+
+[[package]]
+name = "abot-pairing"
+version = "0.1.0"
+dependencies = [
+ "abot-security",
+ "hex",
+ "rand",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.21",
+ "uuid",
+]
+
+[[package]]
+name = "abot-security"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "ed25519-dalek",
+ "hex",
+ "rand",
+ "sha2",
+ "subtle",
+]
+
+[[package]]
+name = "abot-transfer-core"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.21",
+ "uuid",
+]
+
+[[package]]
+name = "abot-windows"
+version = "0.1.0"
+dependencies = [
+ "abot-security",
+ "abot-transfer-core",
+ "base64 0.22.1",
+ "hex",
+ "local-ip-address",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tempfile",
+ "uuid",
+]
+
+[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -50,72 +116,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c982642fa9e8606056828ee9a8505737230110bb1099153c79efe865c59d12ba"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "airbridge-discovery"
-version = "0.1.0"
-dependencies = [
- "mdns-sd",
- "serde",
- "thiserror 2.0.21",
- "uuid",
-]
-
-[[package]]
-name = "airbridge-pairing"
-version = "0.1.0"
-dependencies = [
- "airbridge-security",
- "hex",
- "rand",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 2.0.21",
- "uuid",
-]
-
-[[package]]
-name = "airbridge-security"
-version = "0.1.0"
-dependencies = [
- "aes-gcm",
- "ed25519-dalek",
- "hex",
- "rand",
- "sha2",
- "subtle",
-]
-
-[[package]]
-name = "airbridge-transfer-core"
-version = "0.1.0"
-dependencies = [
- "hex",
- "sha2",
- "tempfile",
- "thiserror 2.0.21",
- "uuid",
-]
-
-[[package]]
-name = "airbridge-windows"
-version = "0.1.0"
-dependencies = [
- "airbridge-security",
- "airbridge-transfer-core",
- "base64 0.22.1",
- "hex",
- "local-ip-address",
- "serde",
- "serde_json",
- "sha2",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tempfile",
- "uuid",
 ]
 
 [[package]]

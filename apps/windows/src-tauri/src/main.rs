@@ -1,3 +1,3 @@
 fn main() {
-    airbridge_windows_lib::run();
+    abot_windows_lib::run();
 }

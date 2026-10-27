@@ -1,4 +1,4 @@
-package dev.airbridge.android
+package app.abot.android
 
 import org.junit.Assert.assertEquals
 import org.junit.Test

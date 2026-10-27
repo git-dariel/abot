@@ -27,3 +27,7 @@ QR payloads are signed with Ed25519 and expire. The signature covers a determini
 ## ADR-007: First encrypted transfer slice
 
 Connect Android sender to Windows receiver first. Use a Windows-generated one-use 256-bit secret and AES-256-GCM domain-separated frames so the offer, decision, chunks, and verification acknowledgement are confidential and authenticated. Keep chunks at 64 KiB and require a fresh receiver session per file. Treat this as development pairing, not durable device identity; do not silently promote the secret into long-lived trust.
+
+## ADR-008: ABOT rebrand compatibility
+
+Rebrand product, package, bundle, UI, and artifact names to ABOT. The Android application ID becomes `app.abot.android` and the Windows bundle identifier becomes `app.abot.desktop`, so previous installations do not upgrade in place. Preserve v1 `AIRBRIDGE-*` authenticated-data bytes, the `_airbridge._tcp.local.` service type, and canonical `airbridge.local` schema IDs. Generate `abot://` pairing links while accepting both `abot://` and legacy `airbridge://` links.

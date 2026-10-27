@@ -12,6 +12,7 @@
 - Native Windows debug executable plus NSIS/MSI bundles.
 - Environment, research, architecture, testing, and release documentation.
 - One-file Android-to-Windows private-LAN transport with a one-use pairing link, encrypted/authenticated control and data frames, explicit Windows acceptance, Android chunk streaming, and Windows verified atomic finalization.
+- Product rebranded to ABOT (`abot.` visual mark and “Abot mo, salo ko.” tagline), including Android/Windows package metadata, adaptive Android icon/splash resources, desktop assets, and dark/light design tokens while preserving v1 wire compatibility identifiers.
 
 ## Verified
 
@@ -25,6 +26,7 @@
 - `cargo test --workspace`: 15 tests passed, including encrypted multi-frame receive plus accepted and rejected TCP integration.
 - Native Windows executable stayed running during a three-second smoke test.
 - REA 6.8.0 inspected the owned APK and Windows PE artifacts through its safe artifact provider.
+- ABOT rebrand checks passed: Android manifest resolves to `app.abot.android`; Android forced unit/APK build and lint pass; Tauri produces `abot-windows.exe` plus ABOT NSIS/MSI bundles; the native process launch smoke and local browser visual inspection pass.
 
 ## Pending
 

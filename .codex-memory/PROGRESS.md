@@ -36,8 +36,9 @@
 - Android pairing-state lifecycle fix passes `testDebugUnitTest`, `assembleDebug`, and `lintDebug`.
 - User-verified on a real Android device: QR scanning returns to the scrollable black-and-white screen with the comparison code and trust action remaining visible.
 - Trusted reconnect component checks pass: Rust and Android share a fixed HMAC key/proof vector; Rust tests cover mDNS invitation chunking; Rust workspace tests/Clippy, Android unit/APK/lint, and Windows TypeScript/build pass.
+- Trusted-reconnect readiness fix verified on the connected Android device: its empty trusted store explained the failed search; the updated UI disables discovery and shows the required QR/trust/accepted-transfer setup until Windows confirms credential persistence. Discovery now reports candidate resolution or verification failures instead of silently discarding them.
 - User-reported observation: the earlier manual-link flow worked on a real phone and laptop. Exact device/OS details, hashes, duration, and firewall observations were not captured, so this is not a formal hardware acceptance result.
 
 ## Pending
 
-- Real-device trusted reconnect and recorded signed-QR file-transfer validation with hashes and environment details, Windows-to-Android transfer, Android asymmetric identity, replay cache, multi-file/cancellation/resume, gestures, and signed release artifacts.
+- Complete a fresh accepted QR transfer on the connected phone to provision its currently empty trusted store, then validate real-device trusted reconnect and record hashes/environment details. Windows-to-Android transfer, Android asymmetric identity, replay cache, multi-file/cancellation/resume, gestures, and signed release artifacts remain pending.

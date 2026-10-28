@@ -47,13 +47,18 @@ internal class TrustedDeviceStore(context: Context) {
             .remove("$deviceId.key")
             .remove("$deviceId.name")
             .remove("$deviceId.reconnect")
+            .remove("$deviceId.reconnect_provisioned")
             .apply()
+    }
+
+    fun hasProvisionedReconnectCredential(): Boolean = preferences.all.any { (key, value) ->
+        key.endsWith(".reconnect_provisioned") && value == true
     }
 
     @Synchronized
     fun getOrCreateReconnectCredential(pairing: VerifiedPairing): ReconnectCredential {
         require(isTrusted(pairing)) { "The Windows identity is not trusted" }
-        val existing = getReconnectCredential(pairing)
+        val existing = readReconnectCredential(pairing)
         if (existing != null) return existing
         val token = ByteArray(32).also(SecureRandom()::nextBytes)
         check(preferences.edit()
@@ -63,6 +68,19 @@ internal class TrustedDeviceStore(context: Context) {
     }
 
     fun getReconnectCredential(pairing: VerifiedPairing): ReconnectCredential? {
+        if (!isTrusted(pairing)) return null
+        if (!preferences.getBoolean("${pairing.deviceId}.reconnect_provisioned", false)) return null
+        return readReconnectCredential(pairing)
+    }
+
+    fun markReconnectProvisioned(pairing: VerifiedPairing) {
+        require(readReconnectCredential(pairing) != null) { "The reconnect credential is missing" }
+        check(preferences.edit()
+            .putBoolean("${pairing.deviceId}.reconnect_provisioned", true)
+            .commit()) { "The reconnect setup could not be confirmed" }
+    }
+
+    private fun readReconnectCredential(pairing: VerifiedPairing): ReconnectCredential? {
         if (!isTrusted(pairing)) return null
         val encrypted = preferences.getString("${pairing.deviceId}.reconnect", null) ?: return null
         return ReconnectCredential(senderDeviceId, decrypt(encrypted))

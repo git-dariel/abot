@@ -29,6 +29,8 @@
 - User-verified: on a real Android device, QR scanning returns to the scrollable high-contrast screen with the comparison code and trust action still visible.
 - Implemented trusted reconnect: successful QR transfer provisions a Keystore/Credential-Manager protected per-phone credential; Windows publishes signed invitation chunks through mDNS; Android verifies the stored receiver identity, proves credential possession, and derives a fresh encrypted session without rescanning.
 - Tested trusted reconnect: fixed Kotlin/Rust HMAC vectors match; invitation TXT chunk round trip, Rust workspace tests/Clippy, Android unit/APK/lint, and Windows TypeScript/build pass.
+- Implemented provisioning-state fix: Android enables trusted discovery only after an accepted QR transfer and an authenticated Windows completion confirms credential persistence; rejected discovery candidates now produce a diagnostic status instead of a generic timeout.
+- Device observation: the connected phone's ABOT trusted store was empty, so its reported search could not authenticate any laptop. The updated APK visibly explains and enforces the missing setup step.
 - Pending: real-device trusted reconnect and recorded file-transfer validation with matching hashes/environment details, Android asymmetric identity, and replay cache.
 
 ## Milestone 4 — Android to Windows transfer

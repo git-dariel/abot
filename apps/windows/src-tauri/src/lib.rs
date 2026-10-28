@@ -448,10 +448,13 @@ fn receive_once(
         .map_err(|error| format!("The incoming file was not saved: {error}"))?;
     let mut stream = reader.into_inner();
     let prior = snapshot_without_secret(shared);
-    let reconnect_error = if authenticated_sender.is_none() {
-        store_reconnect_credential_from_offer(&offer).err()
+    let (reconnect_provisioned, reconnect_error) = if authenticated_sender.is_none() {
+        match store_reconnect_credential_from_offer(&offer) {
+            Ok(()) => (true, None),
+            Err(error) => (false, Some(error)),
+        }
     } else {
-        None
+        (true, None)
     };
     set_receiver_snapshot(
         shared,
@@ -464,11 +467,15 @@ fn receive_once(
         },
         None,
     )?;
+    let completion = serde_json::json!({
+        "verified": true,
+        "reconnectProvisioned": reconnect_provisioned,
+    });
     if write_encrypted_frame(
         &mut stream,
         &session_key,
         COMPLETE_AAD,
-        br#"{"verified":true}"#,
+        completion.to_string().as_bytes(),
     )
     .is_err()
     {
@@ -1111,7 +1118,9 @@ mod tests {
         client.flush().unwrap();
         let completion =
             read_encrypted_frame(&mut client, &key, COMPLETE_AAD, MAX_CONTROL_FRAME).unwrap();
-        assert_eq!(completion, br#"{"verified":true}"#);
+        let completion: serde_json::Value = serde_json::from_slice(&completion).unwrap();
+        assert_eq!(completion["verified"], true);
+        assert_eq!(completion["reconnectProvisioned"], true);
         receiver.join().unwrap();
 
         assert_eq!(

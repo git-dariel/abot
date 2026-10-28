@@ -86,6 +86,9 @@ private fun AbotApp() {
     var pairingTrusted by rememberSaveable { mutableStateOf(false) }
     var showManualLink by rememberSaveable { mutableStateOf(false) }
     var isDiscovering by remember { mutableStateOf(false) }
+    var trustedReconnectReady by remember {
+        mutableStateOf(trustedDevices.hasProvisionedReconnectCredential())
+    }
     var transferState by remember { mutableStateOf(TransferState.IDLE) }
     var statusMessage by rememberSaveable { mutableStateOf("Scan the QR code shown on Windows.") }
     var progress by remember { mutableFloatStateOf(0f) }
@@ -185,6 +188,10 @@ private fun AbotApp() {
                         )
                     },
                 )
+                if (pairing.reconnectSecretHex != null && result.reconnectProvisioned) {
+                    trustedDevices.markReconnectProvisioned(pairing)
+                    mainHandler.post { trustedReconnectReady = true }
+                }
                 updateState(
                     TransferState.COMPLETED,
                     "${result.fileName} was received, verified, and saved on Windows.",
@@ -232,6 +239,7 @@ private fun AbotApp() {
                     pairingTrusted = pairingTrusted,
                     showManualLink = showManualLink,
                     isDiscovering = isDiscovering,
+                    trustedReconnectReady = trustedReconnectReady,
                     isBusy = isBusy,
                     onDiscover = {
                         isDiscovering = true
@@ -281,6 +289,7 @@ private fun AbotApp() {
                     },
                     onRevoke = { pairing ->
                         trustedDevices.revoke(pairing.deviceId)
+                        trustedReconnectReady = trustedDevices.hasProvisionedReconnectCredential()
                         pairingTrusted = false
                         statusMessage = "Trust revoked. Confirm the code again before sending."
                     },
@@ -307,6 +316,7 @@ private fun PairingCard(
     pairingTrusted: Boolean,
     showManualLink: Boolean,
     isDiscovering: Boolean,
+    trustedReconnectReady: Boolean,
     isBusy: Boolean,
     onDiscover: () -> Unit,
     onScan: () -> Unit,
@@ -322,11 +332,18 @@ private fun PairingCard(
             Text("1. PAIR WITH WINDOWS", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
             Button(
                 onClick = onDiscover,
-                enabled = !isBusy && !isDiscovering,
+                enabled = !isBusy && !isDiscovering && trustedReconnectReady,
                 colors = monochromeButtonColors(),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(if (isDiscovering) "Looking for trusted PCs..." else "Find trusted PC", fontWeight = FontWeight.Bold)
+            }
+            if (!trustedReconnectReady) {
+                Text(
+                    "To enable this, scan the QR, trust the PC, and finish one accepted file transfer.",
+                    color = Color.LightGray,
+                    fontSize = 13.sp,
+                )
             }
             Button(onClick = onScan, enabled = !isBusy, colors = monochromeButtonColors(), modifier = Modifier.fillMaxWidth()) {
                 Text(if (verifiedPairing == null) "Scan QR code" else "Scan a different QR code", fontWeight = FontWeight.Bold)

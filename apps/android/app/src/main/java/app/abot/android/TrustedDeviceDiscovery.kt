@@ -25,6 +25,7 @@ internal class TrustedDeviceDiscovery(
     private var multicastLock: WifiManager.MulticastLock? = null
     private var listener: NsdManager.DiscoveryListener? = null
     private var timeoutRunnable: Runnable? = null
+    @Volatile private var candidateFailure: String? = null
 
     fun discover(
         onFound: (DiscoveredTrustedDevice) -> Unit,
@@ -32,6 +33,7 @@ internal class TrustedDeviceDiscovery(
     ) {
         stop()
         active.set(true)
+        candidateFailure = null
         multicastLock = wifiManager.createMulticastLock("abot-trusted-discovery").apply {
             setReferenceCounted(false)
             acquire()
@@ -46,11 +48,19 @@ internal class TrustedDeviceDiscovery(
                 ) return
                 @Suppress("DEPRECATION")
                 nsdManager.resolveService(service, object : NsdManager.ResolveListener {
-                    override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) = Unit
+                    override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
+                        candidateFailure = "A Windows receiver was found, but Android could not resolve it (error $errorCode)."
+                    }
 
                     override fun onServiceResolved(serviceInfo: NsdServiceInfo) {
                         if (!active.get()) return
-                        val discovered = runCatching { verifiedCandidate(serviceInfo) }.getOrNull() ?: return
+                        val discovered = runCatching { verifiedCandidate(serviceInfo) }
+                            .onFailure {
+                                candidateFailure = it.message
+                                    ?: "A Windows receiver was found, but its invitation was rejected."
+                            }
+                            .getOrNull()
+                            ?: return
                         mainHandler.post {
                             if (active.compareAndSet(true, false)) {
                                 stopInternal()
@@ -64,7 +74,7 @@ internal class TrustedDeviceDiscovery(
             override fun onServiceLost(service: NsdServiceInfo) = Unit
 
             override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
-                finish("Trusted-device discovery could not start.", onFinished)
+                finish("Trusted-device discovery could not start (error $errorCode).", onFinished)
             }
 
             override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) = Unit
@@ -74,7 +84,11 @@ internal class TrustedDeviceDiscovery(
         listener = discoveryListener
         nsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener)
         timeoutRunnable = Runnable {
-            finish("No trusted Windows receiver was found. Start the receiver or scan its QR code.", onFinished)
+            finish(
+                candidateFailure
+                    ?: "No trusted Windows receiver was found. Start the receiver or scan its QR code.",
+                onFinished,
+            )
         }.also { mainHandler.postDelayed(it, DISCOVERY_TIMEOUT_MS) }
     }
 

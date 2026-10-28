@@ -27,7 +27,11 @@ internal object EncryptedTransferClient {
     private const val chunkSize = 64 * 1024
     private const val maxControlFrame = 16 * 1024
 
-    data class Result(val fileName: String, val bytesSent: Long)
+    data class Result(
+        val fileName: String,
+        val bytesSent: Long,
+        val reconnectProvisioned: Boolean,
+    )
 
     fun send(
         resolver: ContentResolver,
@@ -69,7 +73,7 @@ internal object EncryptedTransferClient {
             .toString()
             .toByteArray(StandardCharsets.UTF_8)
 
-        Socket().use { socket ->
+        val reconnectProvisioned = Socket().use { socket ->
             socket.connect(InetSocketAddress(pairing.host, pairing.port), 10_000)
             socket.soTimeout = 10 * 60 * 1000
             val output = DataOutputStream(socket.getOutputStream().buffered())
@@ -115,8 +119,9 @@ internal object EncryptedTransferClient {
                 ),
             )
             check(completion.optBoolean("verified")) { "The receiver could not verify the file" }
+            completion.optBoolean("reconnectProvisioned", pairing.reconnectProofHex != null)
         }
-        return Result(fileName, fileSize)
+        return Result(fileName, fileSize, reconnectProvisioned)
     }
 
     private fun streamFile(

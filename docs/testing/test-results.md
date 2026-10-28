@@ -30,10 +30,11 @@ Not run for the signed-QR change: Android instrumentation tests, Android emulato
 - `pnpm typecheck` and `pnpm build:windows-ui`: passed.
 - `apps/android/gradlew.bat testDebugUnitTest assembleDebug lintDebug`: passed, including the Kotlin side of the fixed cross-platform HMAC vector.
 - Not run: Android-to-Windows mDNS discovery and `ABR2` reconnect on two physical devices. This remains a hardware acceptance task, not a claimed successful reconnect.
+- Reconnect-readiness regression check: the connected phone had an empty ABOT trusted store. The updated APK was installed with `adb install -r`; UI automation confirmed **Find trusted PC** is disabled and the QR/trust/accepted-transfer prerequisite is visible. Full reconnect still requires the owner to select and approve a real file on both devices.
 
 Generated debug artifacts:
 
-- ABOT APK: `apps/android/app/build/outputs/apk/debug/app-debug.apk` (13,843,303 bytes), SHA-256 `2260C0B435836535D87F2CEC210A9C69999AF9DBCA5B2B3DEB5E7A61C9F047E0`.
+- ABOT APK: `apps/android/app/build/outputs/apk/debug/app-debug.apk` (13,843,303 bytes), SHA-256 `87C380A6BD8D76974C7EF8BEE209CAFD5956D2736E01A94D56A5AD911A96F0F0`.
 - ABOT Windows executable: `target/debug/abot-windows.exe` (13,584,384 bytes), SHA-256 `7404CF3D74D375ECFFC9D184264CCF7ED07D5D5A318BDFF23CA3E4946876B7DB`.
 - ABOT NSIS installer: `target/debug/bundle/nsis/ABOT_0.1.0_x64-setup.exe` (2,629,327 bytes), SHA-256 `FB21375FA63A6447095CD797FAFCADBF2C3C9BADE6A658A1DA4253960E91AC89`.
 - ABOT MSI installer: `target/debug/bundle/msi/ABOT_0.1.0_x64_en-US.msi` (4,382,720 bytes), SHA-256 `DC428E26163FA2DABE9EEBFE37E37EE3A76AE6D84AA6523E93A6B0B14D6402F9`.

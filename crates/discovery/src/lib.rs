@@ -73,6 +73,24 @@ impl ServiceAdvertisement {
         port: u16,
         protocol_major: u16,
     ) -> Result<Self, DiscoveryError> {
+        Self::start_with_properties(
+            device_id,
+            display_name,
+            address,
+            port,
+            protocol_major,
+            HashMap::new(),
+        )
+    }
+
+    pub fn start_with_properties(
+        device_id: Uuid,
+        display_name: &str,
+        address: IpAddr,
+        port: u16,
+        protocol_major: u16,
+        mut properties: HashMap<String, String>,
+    ) -> Result<Self, DiscoveryError> {
         let candidate = DiscoveredPeer {
             instance_id: device_id,
             display_name: display_name.to_owned(),
@@ -84,11 +102,9 @@ impl ServiceAdvertisement {
         let daemon = ServiceDaemon::new()?;
         let instance_name = format!("abot-{device_id}");
         let host_name = format!("{instance_name}.local.");
-        let properties = HashMap::from([
-            ("device_id".to_owned(), device_id.to_string()),
-            ("display_name".to_owned(), display_name.to_owned()),
-            ("protocol_major".to_owned(), protocol_major.to_string()),
-        ]);
+        properties.insert("device_id".to_owned(), device_id.to_string());
+        properties.insert("display_name".to_owned(), display_name.to_owned());
+        properties.insert("protocol_major".to_owned(), protocol_major.to_string());
         let service = ServiceInfo::new(
             SERVICE_TYPE,
             &instance_name,

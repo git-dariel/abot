@@ -11,7 +11,7 @@ Observed on 2026-10-28:
 | `apps/android/gradlew.bat lintDebug --rerun-tasks --no-daemon` | Pass: 26 tasks | Android debug source/resources lint |
 | `cargo check --workspace --all-targets` | Pass | Rust libraries and Tauri native crate |
 | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | Pass | Rust libraries and Tauri native crate |
-| `cargo test --workspace` | Pass: 15 tests | Streaming/finalization, AES-GCM authentication, identities, pairing, discovery, Windows metadata, encrypted multi-frame receive, and accepted/rejected TCP integration |
+| `cargo test --workspace` | Pass: 18 tests | Streaming/finalization, AES-GCM authentication, identities, pairing, discovery, Windows metadata, reconnect derivation, encrypted multi-frame receive, and accepted/rejected TCP integration |
 | `pnpm exec tauri build --debug` | Pass | Native executable plus NSIS and MSI debug bundles |
 | Windows launch smoke | Pass | Process remained alive for three seconds, then was stopped by the test |
 | REA `inspect-artifact` | Pass | Static APK and PE identity/container evidence |
@@ -23,9 +23,17 @@ The protocol-package synthetic test sent random bytes over loopback and enforced
 
 Not run for the signed-QR change: Android instrumentation tests, Android emulator/device visual inspection, native Windows UI capture, recorded cross-device LAN transfer, or hardware E2E. The project owner reported the earlier manual-link flow working on a phone and laptop, but exact device/OS, hashes, duration, and firewall observations were not captured. The Windows React UI was previously visually inspected from its local production-equivalent development rendering; native Computer Use capture was unavailable because its Windows pipe was not present.
 
+## Trusted reconnect component validation - 2026-10-29
+
+- `cargo test --workspace`: passed, including shared reconnect derivation and mDNS invitation chunk round trip.
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings`: passed.
+- `pnpm typecheck` and `pnpm build:windows-ui`: passed.
+- `apps/android/gradlew.bat testDebugUnitTest assembleDebug lintDebug`: passed, including the Kotlin side of the fixed cross-platform HMAC vector.
+- Not run: Android-to-Windows mDNS discovery and `ABR2` reconnect on two physical devices. This remains a hardware acceptance task, not a claimed successful reconnect.
+
 Generated debug artifacts:
 
-- ABOT APK: `apps/android/app/build/outputs/apk/debug/app-debug.apk` (9,481,075 bytes), SHA-256 `10ECA87D89B0D99CA9E4447B4EB14E6DAA8692DBD716BB814EC229569D2BB53B`.
+- ABOT APK: `apps/android/app/build/outputs/apk/debug/app-debug.apk` (13,843,303 bytes), SHA-256 `2260C0B435836535D87F2CEC210A9C69999AF9DBCA5B2B3DEB5E7A61C9F047E0`.
 - ABOT Windows executable: `target/debug/abot-windows.exe` (13,584,384 bytes), SHA-256 `7404CF3D74D375ECFFC9D184264CCF7ED07D5D5A318BDFF23CA3E4946876B7DB`.
 - ABOT NSIS installer: `target/debug/bundle/nsis/ABOT_0.1.0_x64-setup.exe` (2,629,327 bytes), SHA-256 `FB21375FA63A6447095CD797FAFCADBF2C3C9BADE6A658A1DA4253960E91AC89`.
 - ABOT MSI installer: `target/debug/bundle/msi/ABOT_0.1.0_x64_en-US.msi` (4,382,720 bytes), SHA-256 `DC428E26163FA2DABE9EEBFE37E37EE3A76AE6D84AA6523E93A6B0B14D6402F9`.

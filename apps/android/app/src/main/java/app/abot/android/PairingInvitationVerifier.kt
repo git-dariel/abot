@@ -21,6 +21,9 @@ internal data class VerifiedPairing(
     val comparisonCode: String,
     val expiresAtUnixMs: Long,
     val isLegacy: Boolean = false,
+    val senderDeviceId: String? = null,
+    val reconnectSecretHex: String? = null,
+    val reconnectProofHex: String? = null,
 )
 
 internal object PairingInvitationVerifier {

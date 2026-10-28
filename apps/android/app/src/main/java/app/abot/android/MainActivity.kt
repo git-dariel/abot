@@ -31,6 +31,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -73,16 +74,18 @@ private fun AbotApp() {
     val context = LocalContext.current
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val trustedDevices = remember { TrustedDeviceStore(context) }
+    val trustedDiscovery = remember { TrustedDeviceDiscovery(context, trustedDevices) }
     var selectedUri by rememberSaveable { mutableStateOf<Uri?>(null) }
     var pairingLink by rememberSaveable { mutableStateOf("") }
     var verifiedPairingLink by rememberSaveable { mutableStateOf<String?>(null) }
     val verifiedPairing = remember(verifiedPairingLink) {
         verifiedPairingLink?.let { link ->
-            runCatching { PairingInvitationVerifier.parse(link) }.getOrNull()
+            runCatching { TrustedReconnectProtocol.resolve(link, trustedDevices) }.getOrNull()
         }
     }
     var pairingTrusted by rememberSaveable { mutableStateOf(false) }
     var showManualLink by rememberSaveable { mutableStateOf(false) }
+    var isDiscovering by remember { mutableStateOf(false) }
     var transferState by remember { mutableStateOf(TransferState.IDLE) }
     var statusMessage by rememberSaveable { mutableStateOf("Scan the QR code shown on Windows.") }
     var progress by remember { mutableFloatStateOf(0f) }
@@ -93,6 +96,10 @@ private fun AbotApp() {
         TransferState.TRANSFERRING,
         TransferState.VERIFYING,
     )
+
+    DisposableEffect(trustedDiscovery) {
+        onDispose { trustedDiscovery.stop() }
+    }
 
     fun applyPairing(pairing: VerifiedPairing, link: String) {
         pairingLink = link
@@ -149,12 +156,13 @@ private fun AbotApp() {
 
     fun sendFile() {
         val document = selectedUri ?: return
-        val pairing = verifiedPairing?.takeIf { pairingTrusted } ?: return
+        val trustedPairing = verifiedPairing?.takeIf { pairingTrusted } ?: return
         transferState = TransferState.TRANSFER_OFFERED
         statusMessage = "Hashing the file and preparing an encrypted offer..."
         progress = 0f
         Thread {
             try {
+                val pairing = TrustedReconnectProtocol.prepareQrTransfer(trustedPairing, trustedDevices)
                 val result = EncryptedTransferClient.send(
                     resolver = context.contentResolver,
                     document = document,
@@ -223,7 +231,24 @@ private fun AbotApp() {
                     verifiedPairing = verifiedPairing,
                     pairingTrusted = pairingTrusted,
                     showManualLink = showManualLink,
+                    isDiscovering = isDiscovering,
                     isBusy = isBusy,
+                    onDiscover = {
+                        isDiscovering = true
+                        statusMessage = "Looking for a previously trusted Windows receiver..."
+                        trustedDiscovery.discover(
+                            onFound = { discovered ->
+                                isDiscovering = false
+                                applyPairing(discovered.pairing, discovered.restorablePairingLink)
+                                pairingTrusted = true
+                                statusMessage = "Trusted Windows receiver found. Choose a file to continue."
+                            },
+                            onFinished = { message ->
+                                isDiscovering = false
+                                statusMessage = message
+                            },
+                        )
+                    },
                     onScan = {
                         scanner.launch(
                             ScanOptions()
@@ -281,7 +306,9 @@ private fun PairingCard(
     verifiedPairing: VerifiedPairing?,
     pairingTrusted: Boolean,
     showManualLink: Boolean,
+    isDiscovering: Boolean,
     isBusy: Boolean,
+    onDiscover: () -> Unit,
     onScan: () -> Unit,
     onToggleManual: () -> Unit,
     onLinkChange: (String) -> Unit,
@@ -293,6 +320,14 @@ private fun PairingCard(
     Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("1. PAIR WITH WINDOWS", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+            Button(
+                onClick = onDiscover,
+                enabled = !isBusy && !isDiscovering,
+                colors = monochromeButtonColors(),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (isDiscovering) "Looking for trusted PCs..." else "Find trusted PC", fontWeight = FontWeight.Bold)
+            }
             Button(onClick = onScan, enabled = !isBusy, colors = monochromeButtonColors(), modifier = Modifier.fillMaxWidth()) {
                 Text(if (verifiedPairing == null) "Scan QR code" else "Scan a different QR code", fontWeight = FontWeight.Bold)
             }

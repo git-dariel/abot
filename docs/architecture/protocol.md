@@ -15,13 +15,13 @@ Message IDs are single-use within a bounded replay window. Transfer and file IDs
 
 ## Encrypted single-file transport (implemented development slice)
 
-The first connected path is Android sender to Windows receiver over TCP on a private LAN. Windows generates a random 32-byte one-use secret and private endpoint inside a signed, five-minute `abot://pair` QR invitation. The invitation is transferred out of band by the user and is never advertised through discovery. Android verifies the Ed25519 signature locally before showing the comparison code.
+The first connected path is Android sender to Windows receiver over TCP on a private LAN. Windows creates separate signed, five-minute QR and discovery invitations for the same private endpoint. First pairing transfers only the QR invitation out of band; its random nonce is the one-use AES secret, and Android verifies the Ed25519 signature before showing the comparison code. mDNS advertises only the separate discovery invitation, whose independent nonce is an HMAC challenge rather than a broadcast session key.
 
 Every control or data frame is authenticated and encrypted with AES-256-GCM. Offer, decision, data, and completion frames use separate associated-data domains. Data frames also bind the transfer UUID and monotonically increasing sequence number. Plaintext chunks are limited to 64 KiB, so neither peer buffers the complete file.
 
 The receiver decrypts and validates the offer before presenting it. It sends an encrypted accept/reject decision; Android does not reopen the document for upload until it authenticates an acceptance. A zero-length frame ends the encrypted stream. Windows then verifies the declared byte count and SHA-256, atomically finalizes the temporary file, and sends an encrypted verified acknowledgement.
 
-The offer includes the invitation's receiver public key and Windows rejects a mismatch. Windows acceptance also remains disabled until its user approves the displayed comparison code. Android remembers an explicitly approved receiver public key and can revoke it. Android identity, mutual key agreement, replay caches, multiple files, cancellation, and resume remain pending.
+The offer includes the invitation's receiver public key and Windows rejects a mismatch. During the first successful QR transfer it may also carry an Android installation UUID and random reconnect credential inside the encrypted offer. Android encrypts that credential at rest with Android Keystore; Windows stores it in Credential Manager. For reconnect, Android sends `ABR2` plus an HMAC proof over the fresh invitation nonce, receiver key, and installation UUID. Both peers independently derive the AES session key from the same inputs. The mDNS record is untrusted and cannot establish a session without the stored credential. Android asymmetric identity, replay caches beyond short invitation expiry, multiple files, cancellation, and resume remain pending.
 
 ## Pairing invitation
 

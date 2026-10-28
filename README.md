@@ -6,13 +6,13 @@ Gesture-powered, local-first file sharing between Android phones and Windows com
 
 ## Current status
 
-This repository contains an identity-bound Android-to-Windows transfer path. Windows stores a persistent Ed25519 identity in Windows Credential Manager and displays a signed, five-minute QR invitation. Android verifies it locally, shows the same six-digit comparison code, and stores the approved public identity for later recognition or revocation. Both users approve pairing before Windows can accept an encrypted offer. Files then stream in authenticated 64 KiB chunks to a temporary file for size/SHA-256 verification and atomic finalization. Mutual long-lived identity, reverse-direction transfer, replay caching, and gesture recognition are **not yet complete**.
+This repository contains an identity-bound Android-to-Windows transfer path. Windows stores a persistent Ed25519 identity in Windows Credential Manager and displays a signed, five-minute QR invitation. Android verifies it locally, shows the same six-digit comparison code, and stores the approved public identity for recognition or revocation. A successful QR transfer also provisions a per-phone reconnect credential protected by Android Keystore and Windows Credential Manager. Later sessions can find that trusted PC through mDNS, verify its fresh signed invitation, and derive a new authenticated session without rescanning. Files still move only after explicit Windows acceptance. Full Android asymmetric identity, reverse-direction transfer, replay caching, and gestures are **not yet complete**.
 
 Verified on the current development machine:
 
 - Protocol/schema and synthetic loopback-transfer tests pass with Node.js; the Windows React UI typechecks and produces a Vite production bundle.
 - Android unit tests and the debug APK build pass through the checked-in Gradle wrapper.
-- Sixteen Rust/Tauri tests, including accepted/rejected encrypted TCP loopback transfers and receiver-identity mismatch rejection, and Clippy with warnings denied pass.
+- Eighteen Rust/Tauri tests, including accepted/rejected encrypted TCP loopback transfers, receiver-identity mismatch rejection, discovery payload chunking, and cross-platform reconnect derivation, and Clippy with warnings denied pass.
 - The native Windows executable launches in a bounded smoke test, and debug NSIS/MSI bundles are generated.
 
 See [the roadmap](docs/roadmap.md) and [environment report](docs/environment.md) for exact evidence.
@@ -68,11 +68,13 @@ These commands validate components, not the complete end-to-end acceptance crite
 3. Approve the matching code on both devices, then select one Android document and offer it to Windows.
 4. Review the name, size, and SHA-256 on Windows, then accept or reject it. File bytes do not leave Android until acceptance.
 
+After one successful QR transfer, start a fresh Windows receiver and use **Find trusted PC** on Android. Discovery is only a transport hint: Android still verifies the signed invitation and matches the stored Windows identity before reconnecting.
+
 Windows Firewall may ask for private-network access. Do not enable public-network access. The invitation expires after five minutes and a fresh receiver session is required for each file.
 
 ## Security boundary
 
-Discovery never grants trust. The signed invitation binds the private-LAN endpoint and one-use AES-256-GCM secret to the persistent Windows Ed25519 public key; Android verifies that signature and binds the offer to that same key. The Windows private key is stored in Windows Credential Manager, while Android stores only the approved public identity and supports revocation. A receiver must explicitly accept metadata before Android opens the document for upload. Full mutual device identity, tamper-resistant Android trust metadata, and replay caches remain pending.
+Discovery never grants trust. For first pairing, the signed QR invitation binds the private-LAN endpoint and one-use AES-256-GCM secret to the persistent Windows Ed25519 public key. For repeat sessions, the signed discovery invitation supplies a fresh challenge; Android requires the previously approved Windows identity and proves possession of a per-phone reconnect credential before both peers derive the session key. Reconnect credentials are encrypted with Android Keystore and stored in Windows Credential Manager. A receiver must explicitly accept metadata before Android opens the document. Full Android asymmetric identity and replay caches remain pending.
 
 ## License
 

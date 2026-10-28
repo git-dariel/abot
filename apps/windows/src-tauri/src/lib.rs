@@ -1,3 +1,4 @@
+use abot_discovery::ServiceAdvertisement;
 use abot_pairing::PairingInvitation;
 use abot_security::{
     decrypt_frame, encrypt_frame, fingerprint, DeviceIdentity, AEAD_NONCE_BYTES, SESSION_KEY_BYTES,
@@ -7,7 +8,9 @@ use abot_transfer_core::{
 };
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
+use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpListener};
@@ -19,7 +22,8 @@ use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
 
-const MAGIC: &[u8; 4] = b"ABR1";
+const QR_MAGIC: &[u8; 4] = b"ABR1";
+const RECONNECT_MAGIC: &[u8; 4] = b"ABR2";
 // These v1 wire domains intentionally retain their pre-ABOT bytes for compatibility.
 const OFFER_AAD: &[u8] = b"AIRBRIDGE-OFFER-V1";
 const DECISION_AAD: &[u8] = b"AIRBRIDGE-DECISION-V1";
@@ -30,6 +34,10 @@ const MAX_FILE_SIZE: u64 = 20 * 1024 * 1024 * 1024;
 const IDENTITY_SERVICE: &str = "app.abot.desktop";
 const IDENTITY_ACCOUNT: &str = "device-identity-v1";
 const INVITATION_LIFETIME_MS: u64 = 5 * 60 * 1000;
+const RECONNECT_KEY_AAD: &[u8] = b"AIRBRIDGE-RECONNECT-KEY-V1\0";
+const RECONNECT_PROOF_AAD: &[u8] = b"AIRBRIDGE-RECONNECT-PROOF-V1\0";
+const DISCOVERY_CHUNK_BYTES: usize = 180;
+const MAX_RECONNECT_HELLO: usize = 4 * 1024;
 
 #[derive(Default)]
 struct SelectedFiles(Mutex<HashMap<Uuid, PathBuf>>);
@@ -58,6 +66,8 @@ struct ReceiverSnapshot {
     pairing_qr_data_url: Option<String>,
     pairing_code: Option<String>,
     pairing_approved: bool,
+    trusted_discovery_available: bool,
+    trusted_reconnect: bool,
     identity_fingerprint: Option<String>,
     offer: Option<IncomingOffer>,
     saved_path: Option<String>,
@@ -74,6 +84,17 @@ struct IncomingOffer {
     size: u64,
     sha256: String,
     receiver_identity_key: String,
+    #[serde(default)]
+    sender_device_id: Option<Uuid>,
+    #[serde(default)]
+    reconnect_secret_hex: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ReconnectHello {
+    sender_device_id: Uuid,
+    proof_hex: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -169,6 +190,16 @@ fn start_receiver(
         expires_at_unix_ms,
     )
     .map_err(|error| format!("Could not create the signed pairing invitation: {error}"))?;
+    let discovery_invitation = PairingInvitation::create(
+        &identity,
+        device_id,
+        "ABOT Windows".to_owned(),
+        endpoint
+            .parse()
+            .map_err(|_| "Could not create the discovery endpoint".to_owned())?,
+        expires_at_unix_ms,
+    )
+    .map_err(|error| format!("Could not create the signed discovery invitation: {error}"))?;
     let secret: [u8; SESSION_KEY_BYTES] = hex::decode(&invitation.nonce_hex)
         .map_err(|_| "Could not create the pairing secret".to_owned())?
         .try_into()
@@ -176,12 +207,31 @@ fn start_receiver(
     let payload = invitation
         .to_qr_payload()
         .map_err(|error| error.to_string())?;
-    let pairing_uri = format!("abot://pair?data={}", URL_SAFE_NO_PAD.encode(payload));
+    let pairing_data = URL_SAFE_NO_PAD.encode(payload.as_bytes());
+    let discovery_challenge: [u8; SESSION_KEY_BYTES] = hex::decode(&discovery_invitation.nonce_hex)
+        .map_err(|_| "Could not create the reconnect challenge".to_owned())?
+        .try_into()
+        .map_err(|_| "Could not create the reconnect challenge".to_owned())?;
+    let discovery_payload = discovery_invitation
+        .to_qr_payload()
+        .map_err(|error| error.to_string())?;
+    let discovery_data = URL_SAFE_NO_PAD.encode(discovery_payload.as_bytes());
+    let pairing_uri = format!("abot://pair?data={pairing_data}");
     let pairing_qr_data_url = qr_data_url(&pairing_uri)?;
     let pairing_code = invitation
         .comparison_code()
         .map_err(|error| error.to_string())?;
     let identity_fingerprint = hex::encode(fingerprint(&identity_key));
+    let advertisement = ServiceAdvertisement::start_with_properties(
+        device_id,
+        "ABOT Windows",
+        IpAddr::V4(local_ip),
+        port,
+        1,
+        invitation_discovery_properties(&discovery_data),
+    )
+    .ok();
+    let trusted_discovery_available = advertisement.is_some();
     let snapshot = ReceiverSnapshot {
         state: "waiting".to_owned(),
         endpoint: Some(endpoint),
@@ -189,6 +239,8 @@ fn start_receiver(
         pairing_qr_data_url: Some(pairing_qr_data_url),
         pairing_code: Some(pairing_code),
         pairing_approved: false,
+        trusted_discovery_available,
+        trusted_reconnect: false,
         identity_fingerprint: Some(identity_fingerprint),
         offer: None,
         saved_path: None,
@@ -198,10 +250,12 @@ fn start_receiver(
 
     let shared = Arc::clone(&receiver.0);
     std::thread::spawn(move || {
+        let _advertisement = advertisement;
         if let Err(error) = receive_once(
             listener,
             destination,
             secret,
+            discovery_challenge,
             hex::encode(identity_key),
             expires_at_unix_ms,
             &shared,
@@ -283,6 +337,7 @@ fn receive_once(
     listener: TcpListener,
     destination: PathBuf,
     secret: [u8; SESSION_KEY_BYTES],
+    discovery_challenge: [u8; SESSION_KEY_BYTES],
     expected_receiver_identity_key: String,
     expires_at_unix_ms: u64,
     shared: &Arc<SharedReceiver>,
@@ -307,14 +362,28 @@ fn receive_once(
     stream
         .read_exact(&mut magic)
         .map_err(|_| "The sender did not provide a valid offer".to_owned())?;
-    if &magic != MAGIC {
-        return Err("The sender used an unsupported protocol".to_owned());
-    }
-    let offer_bytes = read_encrypted_frame(&mut stream, &secret, OFFER_AAD, MAX_CONTROL_FRAME)
+    let (session_key, authenticated_sender) = match &magic {
+        value if value == QR_MAGIC => (secret, None),
+        value if value == RECONNECT_MAGIC => {
+            let (key, sender_device_id) = authenticate_reconnect(
+                &mut stream,
+                &discovery_challenge,
+                &expected_receiver_identity_key,
+            )?;
+            (key, Some(sender_device_id))
+        }
+        _ => return Err("The sender used an unsupported protocol".to_owned()),
+    };
+    let offer_bytes = read_encrypted_frame(&mut stream, &session_key, OFFER_AAD, MAX_CONTROL_FRAME)
         .map_err(|_| "The encrypted offer could not be authenticated".to_owned())?;
     let offer: IncomingOffer = serde_json::from_slice(&offer_bytes)
         .map_err(|_| "The sender provided malformed metadata".to_owned())?;
     validate_offer(&offer, &expected_receiver_identity_key)?;
+    if let Some(sender_device_id) = authenticated_sender {
+        if offer.sender_device_id != Some(sender_device_id) {
+            return Err("The reconnect identity does not match the encrypted offer".to_owned());
+        }
+    }
 
     {
         let mut inner = shared
@@ -325,6 +394,10 @@ fn receive_once(
         inner.snapshot.offer = Some(offer.clone());
         inner.snapshot.pairing_uri = None;
         inner.snapshot.pairing_qr_data_url = None;
+        if authenticated_sender.is_some() {
+            inner.snapshot.pairing_approved = true;
+            inner.snapshot.trusted_reconnect = true;
+        }
         inner.decision = None;
     }
     shared.changed.notify_all();
@@ -355,7 +428,7 @@ fn receive_once(
     };
     let decision_bytes = serde_json::to_vec(&decision)
         .map_err(|_| "Could not create the transfer decision".to_owned())?;
-    write_encrypted_frame(&mut stream, &secret, DECISION_AAD, &decision_bytes)
+    write_encrypted_frame(&mut stream, &session_key, DECISION_AAD, &decision_bytes)
         .map_err(|_| "Could not send the transfer decision".to_owned())?;
     if !accepted {
         return Ok(());
@@ -370,23 +443,35 @@ fn receive_once(
         sha256: parse_sha256(&offer.sha256)
             .map_err(|_| "The offered SHA-256 value is invalid".to_owned())?,
     };
-    let mut reader = EncryptedChunkReader::new(stream, secret, offer.transfer_id);
+    let mut reader = EncryptedChunkReader::new(stream, session_key, offer.transfer_id);
     let received = receive_verified(&mut reader, &destination, &expected, MAX_FILE_SIZE)
         .map_err(|error| format!("The incoming file was not saved: {error}"))?;
     let mut stream = reader.into_inner();
     let prior = snapshot_without_secret(shared);
+    let reconnect_error = if authenticated_sender.is_none() {
+        store_reconnect_credential_from_offer(&offer).err()
+    } else {
+        None
+    };
     set_receiver_snapshot(
         shared,
         ReceiverSnapshot {
             state: "completed".to_owned(),
             saved_path: Some(received.path.display().to_string()),
             offer: Some(offer),
-            error: None,
+            error: reconnect_error,
             ..prior
         },
         None,
     )?;
-    if write_encrypted_frame(&mut stream, &secret, COMPLETE_AAD, br#"{"verified":true}"#).is_err() {
+    if write_encrypted_frame(
+        &mut stream,
+        &session_key,
+        COMPLETE_AAD,
+        br#"{"verified":true}"#,
+    )
+    .is_err()
+    {
         if let Ok(mut inner) = shared.inner.lock() {
             inner.snapshot.error =
                 Some("The file was saved, but the sender did not receive confirmation".to_owned());
@@ -419,7 +504,148 @@ fn validate_offer(
     if offer.receiver_identity_key != expected_receiver_identity_key {
         return Err("The offer is not bound to this receiver identity".to_owned());
     }
+    match (&offer.sender_device_id, &offer.reconnect_secret_hex) {
+        (Some(_), Some(secret)) => {
+            let bytes = hex::decode(secret)
+                .map_err(|_| "The reconnect credential is malformed".to_owned())?;
+            if bytes.len() != SESSION_KEY_BYTES {
+                return Err("The reconnect credential is malformed".to_owned());
+            }
+        }
+        (None, None) | (Some(_), None) => {}
+        (None, Some(_)) => return Err("The reconnect credential has no sender identity".to_owned()),
+    }
     Ok(())
+}
+
+fn invitation_discovery_properties(pairing_data: &str) -> HashMap<String, String> {
+    let chunks = pairing_data
+        .as_bytes()
+        .chunks(DISCOVERY_CHUNK_BYTES)
+        .map(|chunk| String::from_utf8(chunk.to_vec()).expect("base64 is UTF-8"))
+        .collect::<Vec<_>>();
+    let mut properties = HashMap::with_capacity(chunks.len() + 1);
+    properties.insert("pairing_parts".to_owned(), chunks.len().to_string());
+    for (index, chunk) in chunks.into_iter().enumerate() {
+        properties.insert(format!("pairing_{index}"), chunk);
+    }
+    properties
+}
+
+fn authenticate_reconnect<R: Read>(
+    source: &mut R,
+    challenge: &[u8; SESSION_KEY_BYTES],
+    receiver_identity_key_hex: &str,
+) -> Result<([u8; SESSION_KEY_BYTES], Uuid), String> {
+    let hello_bytes = read_plain_frame(source, MAX_RECONNECT_HELLO)
+        .map_err(|_| "The reconnect request is malformed".to_owned())?;
+    let hello: ReconnectHello = serde_json::from_slice(&hello_bytes)
+        .map_err(|_| "The reconnect request is malformed".to_owned())?;
+    let proof =
+        hex::decode(&hello.proof_hex).map_err(|_| "The reconnect proof is malformed".to_owned())?;
+    let token = load_reconnect_credential(hello.sender_device_id)?;
+    let key = verify_and_derive_reconnect_key(
+        &token,
+        challenge,
+        receiver_identity_key_hex,
+        hello.sender_device_id,
+        &proof,
+    )?;
+    Ok((key, hello.sender_device_id))
+}
+
+fn verify_and_derive_reconnect_key(
+    token: &[u8],
+    challenge: &[u8; SESSION_KEY_BYTES],
+    receiver_identity_key_hex: &str,
+    sender_device_id: Uuid,
+    proof: &[u8],
+) -> Result<[u8; SESSION_KEY_BYTES], String> {
+    reconnect_mac(
+        token,
+        RECONNECT_PROOF_AAD,
+        challenge,
+        receiver_identity_key_hex,
+        sender_device_id,
+    )?
+    .verify_slice(proof)
+    .map_err(|_| "The trusted-device reconnect proof is invalid".to_owned())?;
+    Ok(reconnect_mac(
+        token,
+        RECONNECT_KEY_AAD,
+        challenge,
+        receiver_identity_key_hex,
+        sender_device_id,
+    )?
+    .finalize()
+    .into_bytes()
+    .into())
+}
+
+fn reconnect_mac(
+    token: &[u8],
+    domain: &[u8],
+    challenge: &[u8; SESSION_KEY_BYTES],
+    receiver_identity_key_hex: &str,
+    sender_device_id: Uuid,
+) -> Result<Hmac<Sha256>, String> {
+    let identity_key = hex::decode(receiver_identity_key_hex)
+        .map_err(|_| "The receiver identity is malformed".to_owned())?;
+    let mut mac = Hmac::<Sha256>::new_from_slice(token)
+        .map_err(|_| "The reconnect credential is invalid".to_owned())?;
+    mac.update(domain);
+    mac.update(challenge);
+    mac.update(&identity_key);
+    mac.update(sender_device_id.as_bytes());
+    Ok(mac)
+}
+
+fn read_plain_frame<R: Read>(source: &mut R, maximum_length: usize) -> io::Result<Vec<u8>> {
+    let length = read_u32(source)? as usize;
+    if length == 0 || length > maximum_length {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "invalid plain frame length",
+        ));
+    }
+    let mut bytes = vec![0_u8; length];
+    source.read_exact(&mut bytes)?;
+    Ok(bytes)
+}
+
+fn reconnect_account(sender_device_id: Uuid) -> String {
+    format!("reconnect-v1-{sender_device_id}")
+}
+
+fn load_reconnect_credential(sender_device_id: Uuid) -> Result<Vec<u8>, String> {
+    let entry = keyring::Entry::new(IDENTITY_SERVICE, &reconnect_account(sender_device_id))
+        .map_err(|error| format!("Windows Credential Manager is unavailable: {error}"))?;
+    let secret = entry
+        .get_secret()
+        .map_err(|_| "This Android device is not trusted for reconnect".to_owned())?;
+    if secret.len() != SESSION_KEY_BYTES {
+        return Err("The stored reconnect credential is invalid".to_owned());
+    }
+    Ok(secret)
+}
+
+fn store_reconnect_credential_from_offer(offer: &IncomingOffer) -> Result<(), String> {
+    let (Some(sender_device_id), Some(secret_hex)) = (
+        offer.sender_device_id,
+        offer.reconnect_secret_hex.as_deref(),
+    ) else {
+        return Ok(());
+    };
+    let secret =
+        hex::decode(secret_hex).map_err(|_| "The reconnect credential is malformed".to_owned())?;
+    if secret.len() != SESSION_KEY_BYTES {
+        return Err("The reconnect credential is malformed".to_owned());
+    }
+    let entry = keyring::Entry::new(IDENTITY_SERVICE, &reconnect_account(sender_device_id))
+        .map_err(|error| format!("Windows Credential Manager is unavailable: {error}"))?;
+    entry
+        .set_secret(&secret)
+        .map_err(|error| format!("The file was saved, but trusted reconnect setup failed: {error}"))
 }
 
 fn now_unix_ms() -> Result<u64, String> {
@@ -490,6 +716,8 @@ fn snapshot_without_secret(shared: &Arc<SharedReceiver>) -> ReceiverSnapshot {
             pairing_qr_data_url: None,
             pairing_code: inner.snapshot.pairing_code.clone(),
             pairing_approved: inner.snapshot.pairing_approved,
+            trusted_discovery_available: inner.snapshot.trusted_discovery_available,
+            trusted_reconnect: inner.snapshot.trusted_reconnect,
             identity_fingerprint: inner.snapshot.identity_fingerprint.clone(),
             offer: inner.snapshot.offer.clone(),
             saved_path: inner.snapshot.saved_path.clone(),
@@ -691,6 +919,70 @@ mod tests {
     }
 
     #[test]
+    fn reconnect_derivation_matches_android_fixture() {
+        let token = (1_u8..=32).collect::<Vec<_>>();
+        let challenge: [u8; 32] = std::array::from_fn(|index| index as u8);
+        let sender_device_id = Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap();
+        let identity_key = "11".repeat(32);
+
+        let key = reconnect_mac(
+            &token,
+            RECONNECT_KEY_AAD,
+            &challenge,
+            &identity_key,
+            sender_device_id,
+        )
+        .unwrap()
+        .finalize()
+        .into_bytes();
+        let proof = reconnect_mac(
+            &token,
+            RECONNECT_PROOF_AAD,
+            &challenge,
+            &identity_key,
+            sender_device_id,
+        )
+        .unwrap()
+        .finalize()
+        .into_bytes();
+
+        assert_eq!(
+            hex::encode(key),
+            "5a5f69b4e018fb6a2a5f2dae2eeb066cb3182957a88d5a596d8e39c79e16e15c"
+        );
+        assert_eq!(
+            hex::encode(proof),
+            "f0a0000021dd40df6fd0406b451b2f9baf8f8a06e5d7b04859276f496d5c4b6e"
+        );
+        assert_eq!(
+            verify_and_derive_reconnect_key(
+                &token,
+                &challenge,
+                &identity_key,
+                sender_device_id,
+                &[0_u8; 32],
+            ),
+            Err("The trusted-device reconnect proof is invalid".to_owned())
+        );
+    }
+
+    #[test]
+    fn discovery_properties_round_trip_pairing_data() {
+        let pairing_data = "signed-invitation".repeat(80);
+        let properties = invitation_discovery_properties(&pairing_data);
+        let count = properties["pairing_parts"].parse::<usize>().unwrap();
+        let rebuilt = (0..count)
+            .map(|index| properties[&format!("pairing_{index}")].as_str())
+            .collect::<String>();
+
+        assert_eq!(rebuilt, pairing_data);
+        assert!(properties
+            .iter()
+            .filter(|(key, _)| key.starts_with("pairing_") && *key != "pairing_parts")
+            .all(|(_, value)| value.len() <= DISCOVERY_CHUNK_BYTES));
+    }
+
+    #[test]
     fn decrypts_streamed_chunks_before_verified_finalization() {
         let directory = tempfile::tempdir().unwrap();
         let key = [9_u8; SESSION_KEY_BYTES];
@@ -730,6 +1022,8 @@ mod tests {
             size: 4,
             sha256: hex::encode(Sha256::digest(b"data")),
             receiver_identity_key: "11".repeat(32),
+            sender_device_id: None,
+            reconnect_secret_hex: None,
         };
 
         assert_eq!(
@@ -758,12 +1052,15 @@ mod tests {
             size: bytes.len() as u64,
             sha256: hex::encode(Sha256::digest(&bytes)),
             receiver_identity_key: receiver_identity_key.clone(),
+            sender_device_id: None,
+            reconnect_secret_hex: None,
         };
 
         let receiver = thread::spawn(move || {
             receive_once(
                 listener,
                 destination,
+                key,
                 key,
                 receiver_identity_key,
                 u64::MAX,
@@ -772,7 +1069,7 @@ mod tests {
             .unwrap()
         });
         let mut client = TcpStream::connect(endpoint).unwrap();
-        client.write_all(MAGIC).unwrap();
+        client.write_all(QR_MAGIC).unwrap();
         write_encrypted_frame(
             &mut client,
             &key,
@@ -842,12 +1139,15 @@ mod tests {
             size: 4,
             sha256: hex::encode(Sha256::digest(b"data")),
             receiver_identity_key: receiver_identity_key.clone(),
+            sender_device_id: None,
+            reconnect_secret_hex: None,
         };
 
         let receiver = thread::spawn(move || {
             receive_once(
                 listener,
                 destination,
+                key,
                 key,
                 receiver_identity_key,
                 u64::MAX,
@@ -856,7 +1156,7 @@ mod tests {
             .unwrap()
         });
         let mut client = TcpStream::connect(endpoint).unwrap();
-        client.write_all(MAGIC).unwrap();
+        client.write_all(QR_MAGIC).unwrap();
         write_encrypted_frame(
             &mut client,
             &key,

@@ -62,6 +62,10 @@ internal object EncryptedTransferClient {
             .put("size", fileSize)
             .put("sha256", digest.digest().toHex())
             .put("receiverIdentityKey", pairing.identityKeyHex)
+            .apply {
+                pairing.senderDeviceId?.let { put("senderDeviceId", it) }
+                pairing.reconnectSecretHex?.let { put("reconnectSecretHex", it) }
+            }
             .toString()
             .toByteArray(StandardCharsets.UTF_8)
 
@@ -70,7 +74,19 @@ internal object EncryptedTransferClient {
             socket.soTimeout = 10 * 60 * 1000
             val output = DataOutputStream(socket.getOutputStream().buffered())
             val input = DataInputStream(socket.getInputStream().buffered())
-            output.write(byteArrayOf(0x41, 0x42, 0x52, 0x31))
+            if (pairing.reconnectProofHex != null && pairing.senderDeviceId != null) {
+                output.write(byteArrayOf(0x41, 0x42, 0x52, 0x32))
+                val hello = JSONObject()
+                    .put("senderDeviceId", pairing.senderDeviceId)
+                    .put("proofHex", pairing.reconnectProofHex)
+                    .toString()
+                    .toByteArray(StandardCharsets.UTF_8)
+                output.writeInt(hello.size)
+                output.write(hello)
+                output.flush()
+            } else {
+                output.write(byteArrayOf(0x41, 0x42, 0x52, 0x31))
+            }
             writeEncryptedFrame(output, pairing.secret, offerAad, offer)
             onOfferSent()
 

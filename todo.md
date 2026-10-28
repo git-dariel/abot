@@ -13,7 +13,8 @@
 - [x] Implement mDNS discovery APIs and validated manual-address fallback.
 - [x] Implement signed, expiring QR invitation and short-code identity binding.
 - [ ] Persist device identities in platform secure storage and connect mutual pairing over the network.
-- [ ] Add Android private identity, mutual authentication, and trusted-device reconnection through untrusted mDNS discovery so repeat transfers do not require a QR scan.
+- [x] Add possession-authenticated trusted-device reconnection through untrusted mDNS discovery so repeat transfers do not require a QR scan after one successful provisioning transfer.
+- [ ] Add an Android asymmetric private identity and bind it into mutual pairing as a hardening step beyond reconnect credentials.
 - [ ] Connect explicit offer/accept/reject to real transfer in both directions.
 - [x] Connect one-file Android-to-Windows offer/accept/reject and encrypted verified streaming in platform code.
 - [ ] Add cancellation and persistent resume checkpoints.

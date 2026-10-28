@@ -35,3 +35,7 @@ Rebrand product, package, bundle, UI, and artifact names to ABOT. The Android ap
 ## ADR-009: Receiver-authenticated QR pairing
 
 Persist the Windows Ed25519 private identity in Windows Credential Manager and derive its stable device UUID from the public key. Put a fresh one-use transport secret inside a signed, five-minute QR invitation. Android verifies the signature locally, compares the same six-digit transcript code, and stores only the explicitly approved Windows public identity with a revoke action. Bind each encrypted offer to the invitation's receiver public key and require Windows pairing approval before transfer acceptance. This is receiver-authenticated pairing; Android private identity and mutual key agreement remain future work.
+
+## ADR-010: Possession-authenticated trusted reconnect
+
+After a successful QR-approved transfer, provision a random per-phone reconnect credential only inside the encrypted offer. Protect it at rest with Android Keystore and Windows Credential Manager. Generate separate signed QR and discovery invitations so the QR session secret is never advertised. For repeat sessions, advertise only the discovery invitation as untrusted input, use its nonce as a challenge, and require an HMAC-SHA-256 proof over the challenge, receiver identity key, and Android installation UUID. Derive the reconnect AES key from a separate HMAC domain. This removes repeat QR scanning without treating discovery as identity; Android asymmetric identity and replay caching remain separate hardening work.

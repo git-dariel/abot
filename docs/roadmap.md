@@ -27,7 +27,9 @@
 - Implemented lifecycle fix: verified QR and trust UI state survives Activity recreation when returning from the orientation-locked camera scanner.
 - Tested UI fix: Android unit tests, debug APK assembly, and lint pass.
 - User-verified: on a real Android device, QR scanning returns to the scrollable high-contrast screen with the comparison code and trust action still visible.
-- Pending: recorded signed-QR file-transfer validation with matching hashes and environment details, Android private identity and mutual authenticated key agreement, tamper-resistant Android trust metadata, replay cache, and trusted-device discovery/reconnection UI.
+- Implemented trusted reconnect: successful QR transfer provisions a Keystore/Credential-Manager protected per-phone credential; Windows publishes signed invitation chunks through mDNS; Android verifies the stored receiver identity, proves credential possession, and derives a fresh encrypted session without rescanning.
+- Tested trusted reconnect: fixed Kotlin/Rust HMAC vectors match; invitation TXT chunk round trip, Rust workspace tests/Clippy, Android unit/APK/lint, and Windows TypeScript/build pass.
+- Pending: real-device trusted reconnect and recorded file-transfer validation with matching hashes/environment details, Android asymmetric identity, and replay cache.
 
 ## Milestone 4 — Android to Windows transfer
 

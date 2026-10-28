@@ -25,6 +25,8 @@ type ReceiverSnapshot = {
   pairingQrDataUrl?: string;
   pairingCode?: string;
   pairingApproved: boolean;
+  trustedDiscoveryAvailable: boolean;
+  trustedReconnect: boolean;
   identityFingerprint?: string;
   offer?: IncomingOffer;
   savedPath?: string;
@@ -44,7 +46,7 @@ export function App() {
   const [files, setFiles] = useState<SelectedFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
-  const [receiver, setReceiver] = useState<ReceiverSnapshot>({ state: "stopped", pairingApproved: false });
+  const [receiver, setReceiver] = useState<ReceiverSnapshot>({ state: "stopped", pairingApproved: false, trustedDiscoveryAvailable: false, trustedReconnect: false });
   const [receiverError, setReceiverError] = useState<string | null>(null);
   const [isStartingReceiver, setIsStartingReceiver] = useState(false);
   const nativeShell = isTauri();
@@ -143,19 +145,24 @@ export function App() {
             <>
               <strong>Scan with ABOT on Android</strong>
               {receiver.pairingQrDataUrl && <img className="pairing-qr" src={receiver.pairingQrDataUrl} alt="Signed ABOT pairing QR code" />}
-              <p className="pairing-code" aria-label={`Pairing code ${receiver.pairingCode}`}>{receiver.pairingCode}</p>
+              {receiver.trustedReconnect
+                ? <p>Trusted Android device reconnected.</p>
+                : <p className="pairing-code" aria-label={`Pairing code ${receiver.pairingCode}`}>{receiver.pairingCode}</p>}
               <p>Confirm this same code appears on Android.</p>
               <button type="button" onClick={() => void approvePairing()} disabled={receiver.pairingApproved}>
                 {receiver.pairingApproved ? "This PC approved" : "Code matches on Android"}
               </button>
               <details><summary>Manual pairing link</summary><code>{receiver.pairingUri}</code></details>
               <small>Endpoint {receiver.endpoint} · Identity {receiver.identityFingerprint?.slice(0, 16)}…</small>
+              <small>{receiver.trustedDiscoveryAvailable ? "Trusted-device discovery is active" : "Discovery unavailable; use the QR code"}</small>
             </>
           )}
           {receiver.state === "offerPending" && receiver.offer && (
             <>
               <strong>Incoming file</strong>
-              <p className="pairing-code" aria-label={`Pairing code ${receiver.pairingCode}`}>{receiver.pairingCode}</p>
+              {receiver.trustedReconnect
+                ? <p>Trusted Android device authenticated.</p>
+                : <p className="pairing-code" aria-label={`Pairing code ${receiver.pairingCode}`}>{receiver.pairingCode}</p>}
               <p className="incoming-name">{receiver.offer.name}</p>
               <small>{formatBytes(receiver.offer.size)} · SHA-256 {receiver.offer.sha256.slice(0, 16)}…</small>
               <div className="decision-actions">

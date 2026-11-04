@@ -2,6 +2,8 @@
 
 ## Implemented
 
+- Windows Downloads default and optional local MediaPipe gesture controls: Android palm-to-fist offers a selected file; Windows fist-to-palm accepts a reviewed, identity-approved offer. Models are bundled, and stable-pose gates prevent repeated or brief gestures.
+
 - Repository structure and project governance.
 - Versioned protocol schema, TypeScript definitions, and compatibility fixtures.
 - Rust streamed-copy, integrity, temporary-file, and safe-name core.
@@ -19,6 +21,9 @@
 - Product rebranded to ABOT (`abot.` visual mark and “Abot mo, salo ko.” tagline), including Android/Windows package metadata, adaptive Android icon/splash resources, desktop assets, and dark/light design tokens while preserving v1 wire compatibility identifiers.
 
 ## Verified
+
+- Gesture sequence tests pass on Kotlin and JavaScript; Android unit/APK/lint and Windows TypeScript/UI build pass. Physical-camera recognition and gesture-triggered transfers remain unverified.
+- User confirmed conventional file transfer and trusted-PC reconnect work on their devices.
 
 - `pnpm test`: 3 protocol/synthetic-transfer tests passed.
 - `pnpm typecheck`: protocol and Windows TypeScript checks passed.
@@ -41,4 +46,6 @@
 
 ## Pending
 
-- Complete a fresh accepted QR transfer on the connected phone to provision its currently empty trusted store, then validate real-device trusted reconnect and record hashes/environment details. Windows-to-Android transfer, Android asymmetric identity, replay cache, multi-file/cancellation/resume, gestures, and signed release artifacts remain pending.
+- Real-camera hardware validation of the Downloads/gesture slice; see `docs/testing/gestures.md`.
+
+- Record hashes/environment details for the user-reported successful transfer and reconnect. Windows-to-Android transfer, Android asymmetric identity, replay cache, multi-file/cancellation/resume, gesture hardware acceptance, and signed release artifacts remain pending.

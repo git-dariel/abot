@@ -14,6 +14,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.ABOT"
         android:usesCleartextTraffic="false">
+        <activity android:name=".GestureCaptureActivity" android:exported="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true">

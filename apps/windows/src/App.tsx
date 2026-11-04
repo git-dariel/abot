@@ -1,6 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
+import { GestureAccept } from "./GestureAccept";
 
 type SelectedFile = {
   id?: string;
@@ -98,10 +99,10 @@ export function App() {
     }
   };
 
-  const decideTransfer = async (accepted: boolean) => {
+  const decideTransfer = async (accepted: boolean, transferId = receiver.offer?.transferId) => {
     setReceiverError(null);
     try {
-      setReceiver(await invoke<ReceiverSnapshot>("decide_transfer", { accepted }));
+      setReceiver(await invoke<ReceiverSnapshot>("decide_transfer", { accepted, transferId }));
     } catch (reason) {
       setReceiverError(typeof reason === "string" ? reason : "The decision could not be applied");
     }
@@ -133,12 +134,12 @@ export function App() {
         <div>
           <p className="step">01 / RECEIVE</p>
           <h2 id="receive-heading">Receive from Android</h2>
-          <p>Choose the destination, scan the signed QR code on Android, then compare the six-digit code on both devices.</p>
+          <p>Files are saved to Downloads after you accept. Start receiving, then scan the QR or use Find trusted PC on Android.</p>
         </div>
         <div className="receiver-card" aria-live="polite">
           {receiver.state === "stopped" && (
             <button type="button" onClick={startReceiver} disabled={!nativeShell || isStartingReceiver}>
-              {isStartingReceiver ? "Starting receiver…" : "Choose folder and start receiver"}
+              {isStartingReceiver ? "Starting receiver…" : "Start receiving to Downloads"}
             </button>
           )}
           {receiver.state === "waiting" && receiver.pairingUri && (
@@ -170,6 +171,7 @@ export function App() {
                 <button className="secondary" type="button" onClick={() => void decideTransfer(false)}>Reject</button>
               </div>
               {!receiver.pairingApproved && <button className="pairing-approval" type="button" onClick={() => void approvePairing()}>Code matches on Android</button>}
+              {receiver.pairingApproved && <GestureAccept key={receiver.offer.transferId} onAccept={() => void decideTransfer(true, receiver.offer?.transferId)} />}
             </>
           )}
           {receiver.state === "receiving" && <strong>Receiving encrypted file…</strong>}

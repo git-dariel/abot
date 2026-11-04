@@ -53,6 +53,8 @@ button.secondary { border: 1px solid var(--border); background: transparent; col
 .inline-error { color: var(--danger) !important; }
 .selection-summary, li { display: flex; justify-content: space-between; gap: 24px; }
 ul { margin: 18px 0; padding: 0; list-style: none; border-top: 1px solid var(--border); }
+.gesture-panel { display: grid; gap: 12px; padding-top: 16px; border-top: 1px solid var(--border); }
+.gesture-panel video { width: 100%; max-height: 280px; object-fit: contain; transform: scaleX(-1); background: #000; border-radius: 12px; }
 li { padding: 13px 0; border-bottom: 1px solid var(--border); }
 li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .digest { display: block; margin-top: 4px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; }

@@ -40,6 +40,13 @@
 - Observed: the project owner reported the earlier manual-link Android-to-Windows flow working on a real phone and laptop; device/OS, file size, matching hashes, duration, and firewall behavior were not recorded, so this is not yet a formal acceptance record.
 - Pending: a recorded signed-QR hardware run, UI visual inspection, Android mutual identity, replay cache, cancellation/resume, multi-file offers, and progress reporting on Windows.
 
+## Gesture and Downloads slice
+
+- Implemented: automatic Windows Downloads destination; Android palm-to-fist offer and Windows fist-to-palm acceptance using local MediaPipe, explicit camera enablement, single-hand confidence/hold checks, one-shot sequences, and offer-bound decisions.
+- Tested: see `docs/testing/test-results.md` for current build and sequence-test results.
+- User-reported: conventional file transfer and trusted-PC reconnect work on the user's devices.
+- Pending: real-camera gesture transfer, camera permission/lifecycle scenarios, and recorded file hashes/environment details from `docs/testing/gestures.md`.
+
 ## Milestones 5–10
 
 Reverse-direction transfer, mutual durable pairing, gestures, polished UI, reliability testing, and signed releases remain pending. The reported manual-link hardware success still needs the test evidence required by the acceptance plan.

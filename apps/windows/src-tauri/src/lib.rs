@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
 
@@ -161,12 +161,12 @@ fn start_receiver(
         }
     }
 
-    let Some(destination) = app.dialog().file().blocking_pick_folder() else {
-        return Err("Choose a destination folder to start receiving".to_owned());
-    };
-    let destination = destination
-        .into_path()
-        .map_err(|error| format!("Destination folder is unavailable: {error}"))?;
+    let destination = app
+        .path()
+        .download_dir()
+        .map_err(|_| "Windows Downloads folder is unavailable".to_owned())?;
+    std::fs::create_dir_all(&destination)
+        .map_err(|_| "Could not create the Windows Downloads folder".to_owned())?;
     let listener = TcpListener::bind(("0.0.0.0", 0))
         .map_err(|_| "Could not start the local receiver".to_owned())?;
     let port = listener
@@ -304,6 +304,7 @@ fn approve_pairing(receiver: State<'_, ReceiverState>) -> Result<ReceiverSnapsho
 #[tauri::command]
 fn decide_transfer(
     accepted: bool,
+    transfer_id: Option<Uuid>,
     receiver: State<'_, ReceiverState>,
 ) -> Result<ReceiverSnapshot, String> {
     let mut inner = receiver
@@ -313,6 +314,11 @@ fn decide_transfer(
         .map_err(|_| "Receiver state is unavailable".to_owned())?;
     if inner.snapshot.state != "offerPending" {
         return Err("There is no transfer offer awaiting a decision".to_owned());
+    }
+    if let Some(expected_id) = transfer_id {
+        if inner.snapshot.offer.as_ref().map(|offer| offer.transfer_id) != Some(expected_id) {
+            return Err("The pending offer changed. Review it before deciding".to_owned());
+        }
     }
     if accepted && !inner.snapshot.pairing_approved {
         return Err(

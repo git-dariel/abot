@@ -18,7 +18,8 @@
 - [ ] Connect explicit offer/accept/reject to real transfer in both directions.
 - [x] Connect one-file Android-to-Windows offer/accept/reject and encrypted verified streaming in platform code.
 - [ ] Add cancellation and persistent resume checkpoints.
-- [ ] Integrate MediaPipe gesture input on Android and Windows.
+- [x] Integrate local MediaPipe gesture input on Android and Windows with explicit activation, stable-pose gating, and ordinary button fallback.
+- [ ] Validate grab/release gesture transfers on physical Android and Windows cameras using `docs/testing/gestures.md`.
 - [ ] Record a signed-QR Android-to-Windows acceptance run with device/OS details, file size, matching SHA-256 hashes, duration, rejection, expiry, revocation, and Windows Firewall behavior.
 - [x] Produce unsigned development APK, NSIS, and MSI artifacts with checksums.
 - [x] Rebrand product, platform identities, packages, UI tokens, icons, artifacts, and documentation to ABOT while preserving v1 compatibility identifiers.

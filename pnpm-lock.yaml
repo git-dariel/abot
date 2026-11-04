@@ -13,6 +13,9 @@ importers:
       '@abot/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@mediapipe/tasks-vision':
+        specifier: 0.10.32
+        version: 0.10.32
       '@tauri-apps/api':
         specifier: 2.12.4
         version: 2.12.4
@@ -310,6 +313,9 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@mediapipe/tasks-vision@0.10.32':
+    resolution: {integrity: sha512-3tiAZnmKloYnRXYoO3dKltTUGnqeCwzC4lV03uY0vCsE+aveJTyEVQyZHOlQGQNsjK+gRHzkf9q08C99Qm2K0Q==}
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     resolution: {integrity: sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ==}
@@ -966,6 +972,8 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  '@mediapipe/tasks-vision@0.10.32': {}
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true

@@ -1,6 +1,8 @@
 package app.abot.android
 
 import android.net.Uri
+import android.content.Intent
+import android.app.Activity
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -158,8 +160,13 @@ private fun AbotApp() {
     }
 
     fun sendFile() {
+        if (isBusy) return
         val document = selectedUri ?: return
         val trustedPairing = verifiedPairing?.takeIf { pairingTrusted } ?: return
+        if (!trustedPairing.isLegacy && System.currentTimeMillis() > trustedPairing.expiresAtUnixMs) {
+            statusMessage = "This receiver session expired. Find the PC again or scan a new QR."
+            return
+        }
         transferState = TransferState.TRANSFER_OFFERED
         statusMessage = "Hashing the file and preparing an encrypted offer..."
         progress = 0f
@@ -208,6 +215,10 @@ private fun AbotApp() {
                 )
             }
         }.start()
+    }
+
+    val gestureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) sendFile()
     }
 
     MaterialTheme(colorScheme = AbotColorScheme) {
@@ -303,6 +314,7 @@ private fun AbotApp() {
                     statusMessage = statusMessage,
                     onChooseFile = { picker.launch(arrayOf("*/*")) },
                     onSend = ::sendFile,
+                    onGesture = { gestureLauncher.launch(Intent(context, GestureCaptureActivity::class.java)) },
                 )
             }
         }
@@ -420,6 +432,7 @@ private fun TransferCard(
     statusMessage: String,
     onChooseFile: () -> Unit,
     onSend: () -> Unit,
+    onGesture: () -> Unit,
 ) {
     Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -430,6 +443,9 @@ private fun TransferCard(
             }
             Button(onClick = onSend, enabled = canSend, colors = monochromeButtonColors(), modifier = Modifier.fillMaxWidth()) {
                 Text("Offer file to Windows", fontWeight = FontWeight.Bold)
+            }
+            OutlinedButton(onClick = onGesture, enabled = canSend, modifier = Modifier.fillMaxWidth()) {
+                Text("Grab with hand gesture")
             }
             if (transferState == TransferState.TRANSFERRING || transferState == TransferState.VERIFYING) {
                 LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())

@@ -63,12 +63,14 @@ These commands validate components, not the complete end-to-end acceptance crite
 
 ## Try the Android → Windows development path
 
-1. Launch the native Windows app and select **Choose folder and start receiver**.
+1. Launch the native Windows app and select **Start receiving to Downloads**. Windows resolves your actual Downloads folder automatically.
 2. Tap **Scan QR** in Android, scan the Windows QR, and verify that both screens show the same six-digit code. The manual signed link remains available under the Windows disclosure.
 3. Approve the matching code on both devices, then select one Android document and offer it to Windows.
 4. Review the name, size, and SHA-256 on Windows, then accept or reject it. File bytes do not leave Android until acceptance.
 
 After one successful QR transfer, start a fresh Windows receiver and use **Find trusted PC** on Android. Discovery is only a transport hint: Android still verifies the signed invitation and matches the stored Windows identity before reconnecting.
+
+Optional gesture controls: after choosing a file and pairing, tap **Grab with hand gesture** on Android. Hold one open palm for about a second, then a fist to offer the file. On Windows, review the incoming file and enable **release gesture to accept**; hold a fist, then open your palm. Both cameras process frames locally using the bundled MediaPipe model. Buttons remain available. Gesture recognition is implemented but real-camera transfer acceptance testing remains pending; see [gesture testing](docs/testing/gestures.md).
 
 Windows Firewall may ask for private-network access. Do not enable public-network access. The invitation expires after five minutes and a fresh receiver session is required for each file.
 

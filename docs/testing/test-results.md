@@ -1,5 +1,16 @@
 # Test Results
 
+## Downloads and gestures - 2026-11-05
+
+- Windows gesture gate: 3 Node tests pass (ordered sustained poses, duplicate suppression, low confidence, multiple hands, interruptions, fresh session).
+- Android gesture gate: 2 JUnit tests pass alongside existing tests; debug APK assembly and lint pass.
+- Windows TypeScript checks and production UI build pass, with the model and WASM served from bundled local assets.
+- Rust workspace tests (18) and Clippy pass. `pnpm --filter @abot/windows exec tauri build --debug --no-bundle` passes and builds `target/debug/abot-windows.exe` with local gesture assets.
+- Gesture APK: 69,942,615 bytes; SHA-256 `89F4A90695E229FC692FD5B84E3CFB265EDF74292F1E3EF248EFDF49DC6B6812`. Six Android unit tests passed, including two gesture tests.
+- Hardware limitation: ADB reports no connected phone for this run. Physical camera accuracy, native WebView camera permission, and an end-to-end gesture transfer are pending; use `docs/testing/gestures.md`.
+
+Earlier artifact hashes below belong to the earlier builds, not the gesture build.
+
 Observed on 2026-10-28:
 
 | Command | Result | Scope |

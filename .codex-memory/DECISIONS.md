@@ -1,5 +1,9 @@
 # Decisions
 
+## ADR-011: Local opt-in gesture intent
+
+Bundle the pinned MediaPipe Gesture Recognizer model/runtime. Android palm-to-fist offers the already selected document; Windows fist-to-palm accepts the reviewed pending offer only after pairing approval. Require explicit camera activation, one detected hand, confidence >= 0.8, stable 600 ms poses, an 8-second sequence window, and one trigger per camera session. Bind desktop decisions to the displayed transfer UUID. Keep button controls and stop cameras on screen exit. Resolve Windows Downloads through the OS path API by default.
+
 ## ADR-001: Transfer before gestures
 
 Build and verify the conventional transfer path first. Gesture events may only drive the same explicit state machine.

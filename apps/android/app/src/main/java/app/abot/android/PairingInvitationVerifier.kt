@@ -29,16 +29,24 @@ internal data class VerifiedPairing(
 internal object PairingInvitationVerifier {
     private const val invitationVersion = 1
 
-    fun parse(value: String, nowUnixMs: Long = System.currentTimeMillis()): VerifiedPairing {
+    fun parse(
+        value: String,
+        nowUnixMs: Long = System.currentTimeMillis(),
+        enforceExpiry: Boolean = true,
+    ): VerifiedPairing {
         val uri = URI(value.trim())
         return if (queryParameter(uri.rawQuery, "data") != null) {
-            verify(value, nowUnixMs)
+            verify(value, nowUnixMs, enforceExpiry)
         } else {
             parseLegacy(uri)
         }
     }
 
-    fun verify(value: String, nowUnixMs: Long = System.currentTimeMillis()): VerifiedPairing {
+    fun verify(
+        value: String,
+        nowUnixMs: Long = System.currentTimeMillis(),
+        enforceExpiry: Boolean = true,
+    ): VerifiedPairing {
         val uri = URI(value.trim())
         require(uri.scheme in setOf("abot", "airbridge") && uri.host == "pair") {
             "Scan or paste a valid ABOT pairing link"
@@ -49,7 +57,7 @@ internal object PairingInvitationVerifier {
         val json = JSONObject(payload)
         require(json.getInt("version") == invitationVersion) { "This pairing version is not supported" }
         val expiresAt = json.getLong("expiresAtUnixMs")
-        require(nowUnixMs <= expiresAt) { "The pairing invitation has expired" }
+        require(!enforceExpiry || nowUnixMs <= expiresAt) { "The pairing invitation has expired" }
         val deviceId = json.getString("deviceId")
         val displayName = json.getString("displayName")
         require(displayName.isNotBlank() && displayName.toByteArray(StandardCharsets.UTF_8).size <= 80) {

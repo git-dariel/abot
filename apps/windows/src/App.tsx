@@ -1,4 +1,5 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect, useRef, useState } from "react";
 import { GestureAccept } from "./GestureAccept";
 
@@ -12,6 +13,8 @@ type IncomingOffer = {
 
 type ReceiverSnapshot = {
   state: string;
+  running: boolean;
+  generation: number;
   endpoint?: string;
   pairingUri?: string;
   pairingQrDataUrl?: string;
@@ -22,6 +25,12 @@ type ReceiverSnapshot = {
   identityFingerprint?: string;
   offer?: IncomingOffer;
   savedPath?: string;
+  lastCompleted?: {
+    sequence: number;
+    transferId: string;
+    name: string;
+    savedPath: string;
+  };
   error?: string;
 };
 
@@ -46,13 +55,15 @@ const formatBytes = (bytes: number) => {
 
 export function App() {
   const receiverAutoStarted = useRef(false);
-  const [receiver, setReceiver] = useState<ReceiverSnapshot>({ state: "stopped", pairingApproved: false, trustedDiscoveryAvailable: false, trustedReconnect: false });
+  const lastCompletionSequence = useRef(0);
+  const [receiver, setReceiver] = useState<ReceiverSnapshot>({ state: "stopped", running: false, generation: 0, pairingApproved: false, trustedDiscoveryAvailable: false, trustedReconnect: false });
   const [receiverError, setReceiverError] = useState<string | null>(null);
   const [isStartingReceiver, setIsStartingReceiver] = useState(false);
   const [showPairing, setShowPairing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [outgoing, setOutgoing] = useState<SelectedFile | null>(null);
   const [outgoingArmed, setOutgoingArmed] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
   const nativeShell = isTauri();
 
   useEffect(() => {
@@ -86,14 +97,11 @@ export function App() {
   }, [nativeShell]);
 
   useEffect(() => {
-    if (receiver.state !== "completed" && receiver.state !== "rejected") return;
-    if (receiver.state === "completed") {
-      const name = receiver.savedPath?.split(/[\\/]/).pop();
-      setToast(name ? `${name} received and saved to Downloads.` : "File received and saved to Downloads.");
-    }
-    const restart = window.setTimeout(() => void startReceiver(), 900);
-    return () => window.clearTimeout(restart);
-  }, [receiver.state, receiver.savedPath]);
+    const completion = receiver.lastCompleted;
+    if (!completion || completion.sequence <= lastCompletionSequence.current) return;
+    lastCompletionSequence.current = completion.sequence;
+    setToast(`${completion.name} received and saved to Downloads.`);
+  }, [receiver.lastCompleted]);
 
   useEffect(() => {
     if (!toast) return;
@@ -143,6 +151,33 @@ export function App() {
     }
   };
 
+  useEffect(() => {
+    if (!nativeShell) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void getCurrentWebview().onDragDropEvent(event => {
+      if (disposed) return;
+      if (event.payload.type === "enter" || event.payload.type === "over") {
+        setDragActive(true);
+      } else if (event.payload.type === "leave") {
+        setDragActive(false);
+      } else if (event.payload.type === "drop") {
+        setDragActive(false);
+        setReceiverError(null);
+        void invoke<SelectedFile[]>("select_dropped_file", { paths: event.payload.paths })
+          .then(selected => {
+            setOutgoing(selected[0] ?? null);
+            setOutgoingArmed(false);
+          })
+          .catch(reason => setReceiverError(typeof reason === "string" ? reason : "The dropped file could not be selected"));
+      }
+    }).then(stop => { unlisten = stop; });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [nativeShell]);
+
   const armOutgoing = async () => {
     if (!outgoing) return;
     setReceiverError(null);
@@ -159,7 +194,7 @@ export function App() {
     <main className="app-shell">
       <header>
         <a className="brand" href="#top" aria-label="ABOT home">abot.</a>
-        <span className="status"><span aria-hidden="true" /> {receiver.state === "stopped" ? "Offline" : "Ready"}</span>
+        <span className="status"><span aria-hidden="true" /> {receiver.running ? "Ready" : "Offline"}</span>
       </header>
 
       <section className="hero" id="top">
@@ -216,6 +251,7 @@ export function App() {
               <p className="muted">Re-arming automatically…</p>
             </>
           )}
+          {(receiver.state === "starting" || receiver.state === "restarting") && <><div className="pulse" /><strong>Preparing receiver…</strong></>}
           {receiver.state === "failed" && (
             <>
               <strong>Transfer failed</strong>
@@ -229,11 +265,11 @@ export function App() {
       </section>
       <section className="send-section" aria-labelledby="send-heading">
         <p className="eyebrow">SEND TO PHONE</p>
-        <div className="send-card">
+        <div className={`send-card${dragActive ? " drag-active" : ""}`}>
           {!outgoing && (
             <>
               <strong id="send-heading">Send from this laptop</strong>
-              <p className="muted">Choose one file, then use the local hand gesture to release it to your trusted phone.</p>
+              <p className="muted">Drop one file here or choose it, then grab it with your hand gesture.</p>
               <button type="button" className="secondary compact" onClick={() => void chooseOutgoing()}>Choose file</button>
             </>
           )}
@@ -244,9 +280,11 @@ export function App() {
               <GestureAccept
                 key={outgoing.id}
                 onAccept={() => void armOutgoing()}
-                intro="File ready. Show a fist, then open your palm to release it to your phone."
-                armed="FIST LOCKED - open your palm to send this file."
+                intro="File ready. Show an open palm, then close it into a fist to grab the file."
+                armed="PALM LOCKED - close your hand to send this file."
                 action="send this file"
+                firstPose="Open_Palm"
+                secondPose="Closed_Fist"
               />
               <button type="button" onClick={() => void armOutgoing()}>Send without gesture</button>
               <button type="button" className="secondary" onClick={() => void chooseOutgoing()}>Choose a different file</button>

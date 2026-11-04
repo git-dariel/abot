@@ -15,10 +15,10 @@ use std::collections::HashMap;
 use std::io::{self, Read, Write};
 use std::fs::File;
 use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
-use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::thread;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
@@ -65,12 +65,17 @@ struct SharedReceiver {
 struct ReceiverInner {
     snapshot: ReceiverSnapshot,
     decision: Option<bool>,
+    running: bool,
+    generation: u64,
+    completion_sequence: u64,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ReceiverSnapshot {
     state: String,
+    running: bool,
+    generation: u64,
     endpoint: Option<String>,
     pairing_uri: Option<String>,
     pairing_qr_data_url: Option<String>,
@@ -81,7 +86,17 @@ struct ReceiverSnapshot {
     identity_fingerprint: Option<String>,
     offer: Option<IncomingOffer>,
     saved_path: Option<String>,
+    last_completed: Option<ReceiverCompletion>,
     error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReceiverCompletion {
+    sequence: u64,
+    transfer_id: Uuid,
+    name: String,
+    saved_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -151,21 +166,36 @@ fn select_files(
     app: AppHandle,
     selected_files: State<'_, SelectedFiles>,
 ) -> Result<Vec<SelectedFileMetadata>, String> {
-    let Some(paths) = app.dialog().file().blocking_pick_files() else {
+    let Some(file_path) = app.dialog().file().blocking_pick_file() else {
         return Ok(Vec::new());
     };
-    let paths = paths
-        .into_iter()
-        .map(|file_path| {
-            file_path
-                .into_path()
-                .map_err(|error| format!("Selected path is unavailable: {error}"))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let path = file_path
+        .into_path()
+        .map_err(|error| format!("Selected path is unavailable: {error}"))?;
+    store_selected_paths(vec![path], &selected_files.0)
+}
+
+#[tauri::command]
+fn select_dropped_file(
+    paths: Vec<String>,
+    selected_files: State<'_, SelectedFiles>,
+) -> Result<Vec<SelectedFileMetadata>, String> {
+    if paths.len() != 1 {
+        return Err("Drop exactly one file at a time".to_owned());
+    }
+    store_selected_paths(
+        paths.into_iter().map(PathBuf::from).collect(),
+        &selected_files.0,
+    )
+}
+
+fn store_selected_paths(
+    paths: Vec<PathBuf>,
+    selected_files: &Arc<Mutex<SelectedFilesInner>>,
+) -> Result<Vec<SelectedFileMetadata>, String> {
     let (prepared, updated_selection) = prepare_selected_paths(paths)?;
 
     let mut selection = selected_files
-        .0
         .lock()
         .map_err(|_| "Selected-file state is unavailable".to_owned())?;
     selection.paths = updated_selection;
@@ -212,126 +242,41 @@ fn start_receiver(
     receiver: State<'_, ReceiverState>,
     selected_files: State<'_, SelectedFiles>,
 ) -> Result<ReceiverSnapshot, String> {
-    {
-        let inner = receiver
-            .0
-            .inner
-            .lock()
-            .map_err(|_| "Receiver state is unavailable".to_owned())?;
-        if matches!(
-            inner.snapshot.state.as_str(),
-            "waiting" | "offerPending" | "receiving"
-        ) {
-            return Err("The receiver is already active".to_owned());
-        }
-    }
-
+    eprintln!("ABOT receiver start requested");
     let destination = app
         .path()
         .download_dir()
         .map_err(|_| "Windows Downloads folder is unavailable".to_owned())?;
     std::fs::create_dir_all(&destination)
         .map_err(|_| "Could not create the Windows Downloads folder".to_owned())?;
-    let listener = TcpListener::bind(("0.0.0.0", 0))
-        .map_err(|_| "Could not start the local receiver".to_owned())?;
-    let port = listener
-        .local_addr()
-        .map_err(|_| "Could not determine the receiver port".to_owned())?
-        .port();
-    let local_ip = private_local_ipv4()
-        .ok_or_else(|| "No private IPv4 network address is available".to_owned())?;
-    let endpoint = format!("{local_ip}:{port}");
     let identity = load_or_create_identity()?;
-    let identity_key = identity.public_key();
-    let device_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, &identity_key);
-    let expires_at_unix_ms = now_unix_ms()?.saturating_add(INVITATION_LIFETIME_MS);
-    let invitation = PairingInvitation::create(
-        &identity,
-        device_id,
-        "ABOT Windows".to_owned(),
-        endpoint
-            .parse()
-            .map_err(|_| "Could not create the pairing endpoint".to_owned())?,
-        expires_at_unix_ms,
-    )
-    .map_err(|error| format!("Could not create the signed pairing invitation: {error}"))?;
-    let discovery_invitation = PairingInvitation::create(
-        &identity,
-        device_id,
-        "ABOT Windows".to_owned(),
-        endpoint
-            .parse()
-            .map_err(|_| "Could not create the discovery endpoint".to_owned())?,
-        expires_at_unix_ms,
-    )
-    .map_err(|error| format!("Could not create the signed discovery invitation: {error}"))?;
-    let secret: [u8; SESSION_KEY_BYTES] = hex::decode(&invitation.nonce_hex)
-        .map_err(|_| "Could not create the pairing secret".to_owned())?
-        .try_into()
-        .map_err(|_| "Could not create the pairing secret".to_owned())?;
-    let payload = invitation
-        .to_qr_payload()
-        .map_err(|error| error.to_string())?;
-    let pairing_data = URL_SAFE_NO_PAD.encode(payload.as_bytes());
-    let discovery_challenge: [u8; SESSION_KEY_BYTES] = hex::decode(&discovery_invitation.nonce_hex)
-        .map_err(|_| "Could not create the reconnect challenge".to_owned())?
-        .try_into()
-        .map_err(|_| "Could not create the reconnect challenge".to_owned())?;
-    let discovery_payload = discovery_invitation
-        .to_qr_payload()
-        .map_err(|error| error.to_string())?;
-    let discovery_data = URL_SAFE_NO_PAD.encode(discovery_payload.as_bytes());
-    let pairing_uri = format!("abot://pair?data={pairing_data}");
-    let pairing_qr_data_url = qr_data_url(&pairing_uri)?;
-    let pairing_code = invitation
-        .comparison_code()
-        .map_err(|error| error.to_string())?;
-    let identity_fingerprint = hex::encode(fingerprint(&identity_key));
-    let advertisement = ServiceAdvertisement::start_with_properties(
-        device_id,
-        "ABOT Windows",
-        IpAddr::V4(local_ip),
-        port,
-        1,
-        invitation_discovery_properties(&discovery_data),
-    )
-    .ok();
-    let trusted_discovery_available = advertisement.is_some();
-    let snapshot = ReceiverSnapshot {
-        state: "waiting".to_owned(),
-        endpoint: Some(endpoint),
-        pairing_uri: Some(pairing_uri),
-        pairing_qr_data_url: Some(pairing_qr_data_url),
-        pairing_code: Some(pairing_code),
-        pairing_approved: false,
-        trusted_discovery_available,
-        trusted_reconnect: false,
-        identity_fingerprint: Some(identity_fingerprint),
-        offer: None,
-        saved_path: None,
-        error: None,
-    };
-    set_receiver_snapshot(&receiver.0, snapshot.clone(), None)?;
-
+    {
+        let mut inner = receiver
+            .0
+            .inner
+            .lock()
+            .map_err(|_| "Receiver state is unavailable".to_owned())?;
+        if inner.running {
+            return Err("The receiver is already active".to_owned());
+        }
+        inner.running = true;
+        inner.snapshot.running = true;
+        inner.snapshot.state = "starting".to_owned();
+    }
     let shared = Arc::clone(&receiver.0);
     let outgoing = Arc::clone(&selected_files.0);
-    std::thread::spawn(move || {
-        let _advertisement = advertisement;
-        if let Err(error) = receive_loop(
-            listener,
-            destination,
-            secret,
-            discovery_challenge,
-            hex::encode(identity_key),
-            expires_at_unix_ms,
-            &shared,
-            &outgoing,
-        ) {
+    thread::spawn(move || {
+        if let Err(error) = receiver_supervisor(destination, identity, &shared, &outgoing) {
+            eprintln!("ABOT receiver supervisor stopped: {error}");
             let prior = snapshot_without_secret(&shared);
+            if let Ok(mut inner) = shared.inner.lock() {
+                inner.running = false;
+            }
             let _ = set_receiver_snapshot(
                 &shared,
                 ReceiverSnapshot {
                     state: "failed".to_owned(),
+                    running: false,
                     error: Some(error),
                     ..prior
                 },
@@ -339,7 +284,7 @@ fn start_receiver(
             );
         }
     });
-    Ok(snapshot)
+    receiver_status(receiver)
 }
 
 #[tauri::command]
@@ -406,21 +351,172 @@ fn private_local_ipv4() -> Option<std::net::Ipv4Addr> {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn receive_loop(
+struct ReceiverSession {
     listener: TcpListener,
-    destination: PathBuf,
     secret: [u8; SESSION_KEY_BYTES],
     discovery_challenge: [u8; SESSION_KEY_BYTES],
-    expected_receiver_identity_key: String,
+    receiver_identity_key: String,
     expires_at_unix_ms: u64,
+    _advertisement: Option<ServiceAdvertisement>,
+}
+
+fn receiver_supervisor(
+    destination: PathBuf,
+    identity: DeviceIdentity,
     shared: &Arc<SharedReceiver>,
     outgoing: &Arc<Mutex<SelectedFilesInner>>,
 ) -> Result<(), String> {
     loop {
-        let (mut stream, peer) = listener
-            .accept()
-            .map_err(|_| "The local receiver stopped unexpectedly".to_owned())?;
+        let session = create_receiver_session(&identity, shared)?;
+        if let Err(error) = serve_receiver_session(session, &destination, shared, outgoing) {
+            let prior = snapshot_without_secret(shared);
+            set_receiver_snapshot(
+                shared,
+                ReceiverSnapshot {
+                    state: "restarting".to_owned(),
+                    running: true,
+                    error: Some(error),
+                    ..prior
+                },
+                None,
+            )?;
+            thread::sleep(Duration::from_millis(300));
+        }
+    }
+}
+
+fn create_receiver_session(
+    identity: &DeviceIdentity,
+    shared: &Arc<SharedReceiver>,
+) -> Result<ReceiverSession, String> {
+    let listener = TcpListener::bind(("0.0.0.0", 0))
+        .map_err(|_| "Could not start the local receiver".to_owned())?;
+    listener
+        .set_nonblocking(true)
+        .map_err(|_| "Could not configure the local receiver".to_owned())?;
+    let port = listener
+        .local_addr()
+        .map_err(|_| "Could not determine the receiver port".to_owned())?
+        .port();
+    let local_ip = private_local_ipv4()
+        .ok_or_else(|| "No private IPv4 network address is available".to_owned())?;
+    let endpoint = format!("{local_ip}:{port}");
+    let identity_key = identity.public_key();
+    let device_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, &identity_key);
+    let expires_at_unix_ms = now_unix_ms()?.saturating_add(INVITATION_LIFETIME_MS);
+    let socket_address = endpoint
+        .parse()
+        .map_err(|_| "Could not create the pairing endpoint".to_owned())?;
+    let invitation = PairingInvitation::create(
+        identity,
+        device_id,
+        "ABOT Windows".to_owned(),
+        socket_address,
+        expires_at_unix_ms,
+    )
+    .map_err(|error| format!("Could not create the signed pairing invitation: {error}"))?;
+    let discovery_invitation = PairingInvitation::create(
+        identity,
+        device_id,
+        "ABOT Windows".to_owned(),
+        socket_address,
+        expires_at_unix_ms,
+    )
+    .map_err(|error| format!("Could not create the signed discovery invitation: {error}"))?;
+    let secret: [u8; SESSION_KEY_BYTES] = hex::decode(&invitation.nonce_hex)
+        .map_err(|_| "Could not create the pairing secret".to_owned())?
+        .try_into()
+        .map_err(|_| "Could not create the pairing secret".to_owned())?;
+    let pairing_data = URL_SAFE_NO_PAD.encode(
+        invitation
+            .to_qr_payload()
+            .map_err(|error| error.to_string())?
+            .as_bytes(),
+    );
+    let discovery_challenge: [u8; SESSION_KEY_BYTES] = hex::decode(&discovery_invitation.nonce_hex)
+        .map_err(|_| "Could not create the reconnect challenge".to_owned())?
+        .try_into()
+        .map_err(|_| "Could not create the reconnect challenge".to_owned())?;
+    let discovery_data = URL_SAFE_NO_PAD.encode(
+        discovery_invitation
+            .to_qr_payload()
+            .map_err(|error| error.to_string())?
+            .as_bytes(),
+    );
+    let pairing_uri = format!("abot://pair?data={pairing_data}");
+    let pairing_qr_data_url = qr_data_url(&pairing_uri)?;
+    let pairing_code = invitation
+        .comparison_code()
+        .map_err(|error| error.to_string())?;
+    let advertisement = ServiceAdvertisement::start_with_properties(
+        device_id,
+        "ABOT Windows",
+        IpAddr::V4(local_ip),
+        port,
+        1,
+        invitation_discovery_properties(&discovery_data),
+    )
+    .ok();
+    let mut inner = shared
+        .inner
+        .lock()
+        .map_err(|_| "Receiver state is unavailable".to_owned())?;
+    inner.generation = inner.generation.saturating_add(1);
+    inner.running = true;
+    let snapshot = ReceiverSnapshot {
+        state: "waiting".to_owned(),
+        running: true,
+        generation: inner.generation,
+        endpoint: Some(endpoint),
+        pairing_uri: Some(pairing_uri),
+        pairing_qr_data_url: Some(pairing_qr_data_url),
+        pairing_code: Some(pairing_code),
+        pairing_approved: false,
+        trusted_discovery_available: advertisement.is_some(),
+        trusted_reconnect: false,
+        identity_fingerprint: Some(hex::encode(fingerprint(&identity_key))),
+        offer: None,
+        saved_path: None,
+        last_completed: inner.snapshot.last_completed.clone(),
+        error: None,
+    };
+    let generation = snapshot.generation;
+    inner.snapshot = snapshot;
+    inner.decision = None;
+    shared.changed.notify_all();
+    drop(inner);
+    eprintln!("ABOT receiver session {generation} is ready");
+    Ok(ReceiverSession {
+        listener,
+        secret,
+        discovery_challenge,
+        receiver_identity_key: hex::encode(identity_key),
+        expires_at_unix_ms,
+        _advertisement: advertisement,
+    })
+}
+
+fn serve_receiver_session(
+    session: ReceiverSession,
+    destination: &Path,
+    shared: &Arc<SharedReceiver>,
+    outgoing: &Arc<Mutex<SelectedFilesInner>>,
+) -> Result<(), String> {
+    loop {
+        if now_unix_ms()? >= session.expires_at_unix_ms {
+            return Ok(());
+        }
+        let (mut stream, peer) = match session.listener.accept() {
+            Ok(connection) => connection,
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(100));
+                continue;
+            }
+            Err(_) => return Err("The local receiver stopped unexpectedly".to_owned()),
+        };
+        stream
+            .set_nonblocking(false)
+            .map_err(|_| "Could not configure the incoming connection".to_owned())?;
         let mut magic = [0_u8; 4];
         stream
             .read_exact(&mut magic)
@@ -429,23 +525,28 @@ fn receive_loop(
             handle_reverse_request(
                 stream,
                 peer,
-                discovery_challenge,
-                &expected_receiver_identity_key,
+                session.discovery_challenge,
+                &session.receiver_identity_key,
                 outgoing,
             )?;
             continue;
         }
-        return receive_upload(
+        let trusted_reconnect = receive_upload(
             stream,
             peer,
             magic,
-            destination,
-            secret,
-            discovery_challenge,
-            expected_receiver_identity_key,
-            expires_at_unix_ms,
+            destination.to_path_buf(),
+            session.secret,
+            session.discovery_challenge,
+            session.receiver_identity_key.clone(),
+            session.expires_at_unix_ms,
             shared,
-        );
+        )?;
+        if trusted_reconnect {
+            reset_receiver_to_waiting(shared)?;
+            continue;
+        }
+        return Ok(());
     }
 }
 
@@ -459,13 +560,19 @@ fn receive_once(
     expires_at_unix_ms: u64,
     shared: &Arc<SharedReceiver>,
 ) -> Result<(), String> {
-    receive_loop(
-        listener,
-        destination,
-        secret,
-        discovery_challenge,
-        expected_receiver_identity_key,
-        expires_at_unix_ms,
+    listener
+        .set_nonblocking(true)
+        .map_err(|_| "Could not configure the test receiver".to_owned())?;
+    serve_receiver_session(
+        ReceiverSession {
+            listener,
+            secret,
+            discovery_challenge,
+            receiver_identity_key: expected_receiver_identity_key,
+            expires_at_unix_ms,
+            _advertisement: None,
+        },
+        &destination,
         shared,
         &Arc::new(Mutex::new(SelectedFilesInner::default())),
     )
@@ -482,7 +589,7 @@ fn receive_upload(
     expected_receiver_identity_key: String,
     expires_at_unix_ms: u64,
     shared: &Arc<SharedReceiver>,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     if !is_local_peer(peer) {
         return Err("A connection from outside the local network was rejected".to_owned());
     }
@@ -508,6 +615,7 @@ fn receive_upload(
         }
         _ => return Err("The sender used an unsupported protocol".to_owned()),
     };
+    let trusted_reconnect = authenticated_sender.is_some();
     let offer_bytes = read_encrypted_frame(&mut stream, &session_key, OFFER_AAD, MAX_CONTROL_FRAME)
         .map_err(|_| "The encrypted offer could not be authenticated".to_owned())?;
     let offer: IncomingOffer = serde_json::from_slice(&offer_bytes)
@@ -526,8 +634,6 @@ fn receive_upload(
             .map_err(|_| "Receiver state is unavailable".to_owned())?;
         inner.snapshot.state = "offerPending".to_owned();
         inner.snapshot.offer = Some(offer.clone());
-        inner.snapshot.pairing_uri = None;
-        inner.snapshot.pairing_qr_data_url = None;
         if authenticated_sender.is_some() {
             inner.snapshot.pairing_approved = true;
             inner.snapshot.trusted_reconnect = true;
@@ -550,7 +656,7 @@ fn receive_upload(
         if result.timed_out() {
             inner.snapshot.state = "failed".to_owned();
             inner.snapshot.error = Some("The transfer offer expired before a decision".to_owned());
-            return Ok(());
+            return Ok(trusted_reconnect);
         }
     }
     let accepted = inner.decision.take().unwrap_or(false);
@@ -565,7 +671,7 @@ fn receive_upload(
     write_encrypted_frame(&mut stream, &session_key, DECISION_AAD, &decision_bytes)
         .map_err(|_| "Could not send the transfer decision".to_owned())?;
     if !accepted {
-        return Ok(());
+        return Ok(trusted_reconnect);
     }
 
     stream
@@ -590,12 +696,27 @@ fn receive_upload(
     } else {
         (true, None)
     };
+    let completion_event = {
+        let mut inner = shared
+            .inner
+            .lock()
+            .map_err(|_| "Receiver state is unavailable".to_owned())?;
+        inner.completion_sequence = inner.completion_sequence.saturating_add(1);
+        ReceiverCompletion {
+            sequence: inner.completion_sequence,
+            transfer_id: offer.transfer_id,
+            name: offer.name.clone(),
+            saved_path: received.path.display().to_string(),
+        }
+    };
     set_receiver_snapshot(
         shared,
         ReceiverSnapshot {
             state: "completed".to_owned(),
+            running: true,
             saved_path: Some(received.path.display().to_string()),
             offer: Some(offer),
+            last_completed: Some(completion_event),
             error: reconnect_error,
             ..prior
         },
@@ -618,6 +739,23 @@ fn receive_upload(
                 Some("The file was saved, but the sender did not receive confirmation".to_owned());
         }
     }
+    Ok(trusted_reconnect)
+}
+
+fn reset_receiver_to_waiting(shared: &Arc<SharedReceiver>) -> Result<(), String> {
+    let mut inner = shared
+        .inner
+        .lock()
+        .map_err(|_| "Receiver state is unavailable".to_owned())?;
+    inner.snapshot.state = "waiting".to_owned();
+    inner.snapshot.running = true;
+    inner.snapshot.pairing_approved = false;
+    inner.snapshot.trusted_reconnect = false;
+    inner.snapshot.offer = None;
+    inner.snapshot.saved_path = None;
+    inner.snapshot.error = None;
+    inner.decision = None;
+    shared.changed.notify_all();
     Ok(())
 }
 
@@ -968,9 +1106,11 @@ fn snapshot_without_secret(shared: &Arc<SharedReceiver>) -> ReceiverSnapshot {
         .lock()
         .map(|inner| ReceiverSnapshot {
             state: inner.snapshot.state.clone(),
+            running: inner.running,
+            generation: inner.generation,
             endpoint: inner.snapshot.endpoint.clone(),
-            pairing_uri: None,
-            pairing_qr_data_url: None,
+            pairing_uri: inner.snapshot.pairing_uri.clone(),
+            pairing_qr_data_url: inner.snapshot.pairing_qr_data_url.clone(),
             pairing_code: inner.snapshot.pairing_code.clone(),
             pairing_approved: inner.snapshot.pairing_approved,
             trusted_discovery_available: inner.snapshot.trusted_discovery_available,
@@ -978,6 +1118,7 @@ fn snapshot_without_secret(shared: &Arc<SharedReceiver>) -> ReceiverSnapshot {
             identity_fingerprint: inner.snapshot.identity_fingerprint.clone(),
             offer: inner.snapshot.offer.clone(),
             saved_path: inner.snapshot.saved_path.clone(),
+            last_completed: inner.snapshot.last_completed.clone(),
             error: inner.snapshot.error.clone(),
         })
         .unwrap_or_default()
@@ -1110,6 +1251,9 @@ fn prepare_selected_paths(
         if !metadata.is_file() {
             return Err("Only files can be selected".to_owned());
         }
+        if metadata.len() > MAX_FILE_SIZE {
+            return Err("The selected file exceeds the 20 GiB limit".to_owned());
+        }
         let name = path
             .file_name()
             .and_then(|name| name.to_str())
@@ -1139,6 +1283,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             protocol_status,
             select_files,
+            select_dropped_file,
             arm_outgoing_file,
             outgoing_status,
             start_receiver,
@@ -1454,5 +1599,45 @@ mod tests {
 
         assert_eq!(directory.path().read_dir().unwrap().count(), 0);
         assert_eq!(shared.inner.lock().unwrap().snapshot.state, "rejected");
+    }
+
+    #[test]
+    fn trusted_completion_rearms_without_losing_the_completion_event() {
+        let transfer_id = Uuid::new_v4();
+        let shared = Arc::new(SharedReceiver::default());
+        {
+            let mut inner = shared.inner.lock().unwrap();
+            inner.running = true;
+            inner.generation = 4;
+            inner.snapshot = ReceiverSnapshot {
+                state: "completed".to_owned(),
+                running: true,
+                generation: 4,
+                pairing_uri: Some("abot://pair?data=signed".to_owned()),
+                last_completed: Some(ReceiverCompletion {
+                    sequence: 2,
+                    transfer_id,
+                    name: "second.jpg".to_owned(),
+                    saved_path: "C:\\Downloads\\second.jpg".to_owned(),
+                }),
+                ..ReceiverSnapshot::default()
+            };
+        }
+
+        reset_receiver_to_waiting(&shared).unwrap();
+
+        let inner = shared.inner.lock().unwrap();
+        assert_eq!(inner.snapshot.state, "waiting");
+        assert!(inner.snapshot.running);
+        assert_eq!(inner.snapshot.generation, 4);
+        assert_eq!(
+            inner.snapshot.last_completed.as_ref().unwrap().transfer_id,
+            transfer_id
+        );
+        assert!(inner.snapshot.offer.is_none());
+        assert_eq!(
+            inner.snapshot.pairing_uri.as_deref(),
+            Some("abot://pair?data=signed")
+        );
     }
 }

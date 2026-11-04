@@ -15,8 +15,9 @@ internal object TrustedReconnectProtocol {
     fun mark(pairingUri: String): String = "$pairingUri&$marker"
 
     fun resolve(value: String, trustedDevices: TrustedDeviceStore): VerifiedPairing {
-        val pairing = PairingInvitationVerifier.parse(value)
-        if (!isMarked(value)) return pairing
+        val marked = isMarked(value)
+        val pairing = PairingInvitationVerifier.parse(value, enforceExpiry = !marked)
+        if (!marked) return pairing
         val credential = trustedDevices.getReconnectCredential(pairing)
             ?: throw IllegalArgumentException("This PC needs one successful QR transfer before trusted reconnect")
         return create(pairing, credential)

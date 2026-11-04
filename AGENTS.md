@@ -15,3 +15,17 @@ Follow the user-provided Codex general instructions. In addition:
 - Use Rust workspace conventions for `crates/`, Kotlin/Compose conventions for `apps/android/`, and React/Tauri conventions for `apps/windows/`.
 
 Before completing a change, run the narrowest relevant checks that the installed toolchains permit and report unavailable checks exactly.
+
+
+## Token-Efficient Memory Workflow
+
+- Treat Obsidian as persistent project memory.
+- Never load the entire Obsidian vault.
+- Search for relevant memory files before reading.
+- Read at most 3 relevant notes initially.
+- Prefer summaries over full session histories.
+- Inspect only repository files related to the task.
+- Avoid repeating completed research.
+- Do not reread unchanged files unnecessarily.
+- Update memory with concise implementation summaries.
+- Never skip required tests or security checks to save tokens.

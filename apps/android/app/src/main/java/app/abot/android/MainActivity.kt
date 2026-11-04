@@ -4,6 +4,8 @@ import android.Manifest
 import android.content.Context
 import android.net.Uri
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
 import android.app.Activity
 import android.content.pm.PackageManager
 import android.os.Build
@@ -60,8 +62,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
-import java.util.concurrent.CompletableFuture
-import java.util.concurrent.TimeUnit
 
 private val AbotColorScheme = lightColorScheme(
     primary = Color.Black,
@@ -78,14 +78,85 @@ private val AbotColorScheme = lightColorScheme(
 )
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        const val ACTION_SHOW_RECEIVE = "app.abot.android.action.SHOW_RECEIVE"
+    }
+
+    private var requestedReceiveId by mutableStateOf<String?>(null)
+    private var completedReceiveName by mutableStateOf<String?>(null)
+    private var receiverRegistered = false
+    private val transferEvents = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                TrustedReceiverService.ACTION_OFFER_AVAILABLE -> {
+                    requestedReceiveId = intent.getStringExtra(TrustedReceiverService.EXTRA_TRANSFER_ID)
+                }
+                TrustedReceiverService.ACTION_TRANSFER_COMPLETED -> {
+                    val name = intent.getStringExtra(TrustedReceiverService.EXTRA_FILE_NAME) ?: "File"
+                    completedReceiveName = name
+                    Toast.makeText(context, "$name received from Windows.", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { AbotApp() }
+        requestedReceiveId = intent.receiveTransferId()
+            ?: TrustedReceiverService.pendingOffer()?.transferId?.toString()
+        setContent {
+            AbotApp(
+                requestedReceiveId = requestedReceiveId,
+                completedReceiveName = completedReceiveName,
+                onReceiveRequestConsumed = { requestedReceiveId = null },
+                onCompletedReceiveConsumed = { completedReceiveName = null },
+            )
+        }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        requestedReceiveId = intent.receiveTransferId()
+            ?: TrustedReceiverService.pendingOffer()?.transferId?.toString()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (!receiverRegistered) {
+            ContextCompat.registerReceiver(
+                this,
+                transferEvents,
+                IntentFilter().apply {
+                    addAction(TrustedReceiverService.ACTION_OFFER_AVAILABLE)
+                    addAction(TrustedReceiverService.ACTION_TRANSFER_COMPLETED)
+                },
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+            receiverRegistered = true
+        }
+        TrustedReceiverService.consumeCompletedFile()?.let { completedReceiveName = it }
+    }
+
+    override fun onStop() {
+        if (receiverRegistered) {
+            unregisterReceiver(transferEvents)
+            receiverRegistered = false
+        }
+        super.onStop()
+    }
+
+    private fun Intent.receiveTransferId(): String? =
+        takeIf { action == ACTION_SHOW_RECEIVE }?.getStringExtra(TrustedReceiverService.EXTRA_TRANSFER_ID)
 }
 
 @Composable
-private fun AbotApp() {
+private fun AbotApp(
+    requestedReceiveId: String?,
+    completedReceiveName: String?,
+    onReceiveRequestConsumed: () -> Unit,
+    onCompletedReceiveConsumed: () -> Unit,
+) {
     val context = LocalContext.current
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val trustedDevices = remember { TrustedDeviceStore(context) }
@@ -116,9 +187,6 @@ private fun AbotApp() {
     }
     var progress by remember { mutableFloatStateOf(0f) }
     var reverseOffer by remember { mutableStateOf<ReverseOffer?>(null) }
-    var reverseDecision by remember { mutableStateOf<CompletableFuture<Boolean>?>(null) }
-    var reversePolling by remember { mutableStateOf(false) }
-    var reverseRetryToken by remember { mutableStateOf(0) }
     val isBusy = transferState in setOf(
         TransferState.TRANSFER_OFFERED,
         TransferState.AWAITING_REMOTE_CONFIRMATION,
@@ -155,6 +223,12 @@ private fun AbotApp() {
     val galleryPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         hasPhotoAccess = hasGalleryPhotoAccess(context)
         if (!hasPhotoAccess) statusMessage = "Photo access is required to show ABOT Gallery."
+    }
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        TrustedReceiverService.start(context)
+        if (!granted) {
+            statusMessage = "Background receiver is active, but open ABOT to see incoming files because notifications are disabled."
+        }
     }
     val scanner = rememberLauncherForActivityResult(ScanContract()) { result ->
         result.contents?.let { scanned ->
@@ -216,7 +290,11 @@ private fun AbotApp() {
         if (isBusy) return
         val document = selectedUri ?: return
         val trustedPairing = verifiedPairing?.takeIf { pairingTrusted } ?: return
-        if (!trustedPairing.isLegacy && System.currentTimeMillis() > trustedPairing.expiresAtUnixMs) {
+        if (
+            !trustedPairing.isLegacy &&
+            trustedPairing.reconnectProofHex == null &&
+            System.currentTimeMillis() > trustedPairing.expiresAtUnixMs
+        ) {
             statusMessage = "This receiver session expired. Find the PC again or scan a new QR."
             return
         }
@@ -266,17 +344,32 @@ private fun AbotApp() {
                 )
                 mainHandler.postDelayed({
                     selectedUri = null
-                    verifiedPairingLink = null
-                    pairingTrusted = false
-                    galleryDiscoveryAttempted = false
-                    discoveryRetryToken += 1
                     transferState = TransferState.IDLE
-                    statusMessage = "Ready for another photo. Reconnecting automatically..."
+                    if (pairing.reconnectProofHex == null && result.reconnectProvisioned) {
+                        verifiedPairingLink = null
+                        pairingTrusted = false
+                        galleryDiscoveryAttempted = false
+                        discoveryRetryToken += 1
+                        statusMessage = "Ready for another photo. Reconnecting with your trusted PC..."
+                    } else {
+                        statusMessage = "Ready for another photo. Your trusted PC stays connected."
+                    }
                 }, 1_500)
             } catch (error: Exception) {
                 val detail = when (error) {
                     is IllegalArgumentException, is IllegalStateException -> error.message
                     else -> null
+                }
+                if (
+                    error.message?.contains("Connection refused", ignoreCase = true) == true ||
+                    error.message?.contains("reset", ignoreCase = true) == true
+                ) {
+                    mainHandler.post {
+                        verifiedPairingLink = null
+                        pairingTrusted = false
+                        galleryDiscoveryAttempted = false
+                        discoveryRetryToken += 1
+                    }
                 }
                 updateState(
                     TransferState.FAILED,
@@ -289,71 +382,19 @@ private fun AbotApp() {
         }.start()
     }
 
-    fun pollForWindowsFile(pairing: VerifiedPairing) {
-        if (reversePolling || reverseOffer != null || isBusy) return
-        reversePolling = true
-        Thread {
-            try {
-                val received = ReverseTransferClient.poll(
-                    resolver = context.contentResolver,
-                    cacheDirectory = context.cacheDir,
-                    pairing = pairing,
-                    decide = { offer ->
-                        val decision = CompletableFuture<Boolean>()
-                        mainHandler.post {
-                            reverseOffer = offer
-                            reverseDecision = decision
-                            statusMessage = "${offer.name} is ready from Windows. Review and receive it on this phone."
-                        }
-                        decision.get(10, TimeUnit.MINUTES)
-                    },
-                    onProgress = { receivedBytes, total ->
-                        updateState(
-                            TransferState.TRANSFERRING,
-                            "Receiving ${formatBytes(receivedBytes)} of ${formatBytes(total)} from Windows...",
-                            if (total == 0L) 1f else (receivedBytes.toDouble() / total).toFloat(),
-                        )
-                    },
-                )
-                mainHandler.post {
-                    reverseOffer = null
-                    reverseDecision = null
-                    if (received != null) {
-                        transferState = TransferState.COMPLETED
-                        progress = 1f
-                        statusMessage = "$received was verified and saved to Downloads/ABOT."
-                        Toast.makeText(context, "$received received from Windows.", Toast.LENGTH_LONG).show()
-                    }
-                }
-            } catch (error: Exception) {
-                mainHandler.post {
-                    reverseOffer = null
-                    reverseDecision = null
-                    val detail = error.message ?: "Laptop-to-phone transfer failed"
-                    statusMessage = detail
-                    if (detail.contains("Connection refused", ignoreCase = true)) {
-                        verifiedPairingLink = null
-                        pairingTrusted = false
-                        galleryDiscoveryAttempted = false
-                        discoveryRetryToken += 1
-                    } else {
-                        Toast.makeText(context, detail, Toast.LENGTH_LONG).show()
-                    }
-                }
-            } finally {
-                mainHandler.postDelayed({
-                    reversePolling = false
-                    if (transferState == TransferState.COMPLETED) transferState = TransferState.IDLE
-                    reverseRetryToken += 1
-                }, 3_000)
-            }
-        }.start()
-    }
-
     val gestureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             Toast.makeText(context, "Photo grabbed. Preparing the Windows offer...", Toast.LENGTH_SHORT).show()
             sendFile()
+        }
+    }
+    val receiveGestureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val transferId = result.data?.getStringExtra(ReceiveGestureActivity.EXTRA_TRANSFER_ID)
+        if (result.resultCode == Activity.RESULT_OK && transferId != null) {
+            TrustedReceiverService.accept(context, transferId)
+            reverseOffer = null
+            transferState = TransferState.ACCEPTED
+            statusMessage = "Palm confirmed. Receiving encrypted file from Windows..."
         }
     }
 
@@ -376,11 +417,41 @@ private fun AbotApp() {
             discoverTrustedPc()
         }
     }
-    LaunchedEffect(receiverReady, reverseRetryToken) {
-        val pairing = verifiedPairing
-        if (receiverReady && pairing?.reconnectProofHex != null && reverseOffer == null && !isBusy) {
-            pollForWindowsFile(pairing)
+    LaunchedEffect(trustedReconnectReady) {
+        if (trustedReconnectReady) {
+            if (
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                TrustedReceiverService.start(context)
+            }
         }
+    }
+    LaunchedEffect(requestedReceiveId, isBusy) {
+        val transferId = requestedReceiveId ?: return@LaunchedEffect
+        if (isBusy) return@LaunchedEffect
+        val offer = TrustedReceiverService.pendingOffer(transferId)
+        onReceiveRequestConsumed()
+        if (offer == null) {
+            Toast.makeText(context, "This transfer offer is no longer available.", Toast.LENGTH_SHORT).show()
+        } else {
+            reverseOffer = offer
+            statusMessage = "${offer.name} is waiting. Show an open palm to receive it."
+            receiveGestureLauncher.launch(
+                Intent(context, ReceiveGestureActivity::class.java)
+                    .putExtra(ReceiveGestureActivity.EXTRA_TRANSFER_ID, transferId),
+            )
+        }
+    }
+    LaunchedEffect(completedReceiveName) {
+        val name = completedReceiveName ?: return@LaunchedEffect
+        reverseOffer = null
+        transferState = TransferState.IDLE
+        progress = 1f
+        statusMessage = "$name was verified and saved to Downloads/ABOT."
+        onCompletedReceiveConsumed()
     }
 
     MaterialTheme(colorScheme = AbotColorScheme) {
@@ -490,20 +561,32 @@ private fun AbotApp() {
                             Text("Incoming from Windows", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
                             Text(offer.name, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                             Text(formatBytes(offer.size), color = Color(0xFF666666))
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Button(
-                                    onClick = {
-                                        transferState = TransferState.ACCEPTED
-                                        statusMessage = "Accepted. Receiving encrypted file..."
-                                        reverseDecision?.complete(true)
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                ) { Text("Receive") }
-                                OutlinedButton(
-                                    onClick = { reverseDecision?.complete(false) },
-                                    modifier = Modifier.weight(1f),
-                                ) { Text("Decline") }
-                            }
+                            Button(
+                                onClick = {
+                                    receiveGestureLauncher.launch(
+                                        Intent(context, ReceiveGestureActivity::class.java)
+                                            .putExtra(ReceiveGestureActivity.EXTRA_TRANSFER_ID, offer.transferId.toString()),
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text("Open receive camera") }
+                            OutlinedButton(
+                                onClick = {
+                                    TrustedReceiverService.accept(context, offer.transferId.toString())
+                                    reverseOffer = null
+                                    transferState = TransferState.ACCEPTED
+                                    statusMessage = "Accepted. Receiving encrypted file..."
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text("Receive without gesture") }
+                            TextButton(
+                                onClick = {
+                                    TrustedReceiverService.decline(context, offer.transferId.toString())
+                                    reverseOffer = null
+                                    statusMessage = "Windows transfer declined."
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text("Decline") }
                         }
                     }
                 }

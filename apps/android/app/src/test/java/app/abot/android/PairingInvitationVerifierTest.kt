@@ -4,6 +4,7 @@ import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
 import org.bouncycastle.crypto.signers.Ed25519Signer
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
@@ -40,6 +41,14 @@ class PairingInvitationVerifierTest {
             .encodeToString(decoded.toString().toByteArray(StandardCharsets.UTF_8))
         val failure = runCatching { PairingInvitationVerifier.verify(tampered, 10_000) }.exceptionOrNull()
         check(failure is IllegalArgumentException)
+    }
+
+    @Test
+    fun expiredInvitationIsRejectedForPairingButCanRestoreAnAuthenticatedReconnectSession() {
+        val invitation = invitationUri()
+        assertTrue(runCatching { PairingInvitationVerifier.verify(invitation, 30_000) }.isFailure)
+        val restored = PairingInvitationVerifier.parse(invitation, 30_000, enforceExpiry = false)
+        assertEquals("ABOT Windows", restored.displayName)
     }
 
     private fun invitationUri(): String {

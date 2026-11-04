@@ -1,11 +1,18 @@
 // A fresh instance is scoped to one reviewed offer and one camera session.
 export class GestureSequence {
+  firstPose;
+  secondPose;
   armed = false;
   fired = false;
   pose = null;
   since = 0;
   last = -1;
   armedAt = 0;
+
+  constructor(firstPose = 'Closed_Fist', secondPose = 'Open_Palm') {
+    this.firstPose = firstPose;
+    this.secondPose = secondPose;
+  }
 
   reset() {
     this.armed = false;
@@ -25,11 +32,11 @@ export class GestureSequence {
     }
     if (this.pose !== name) { this.pose = name; this.since = timeMs; }
     if (timeMs - this.since < 350) return false;
-    if (!this.armed && name === 'Closed_Fist') {
+    if (!this.armed && name === this.firstPose) {
       this.armed = true;
       this.armedAt = timeMs;
       this.pose = null;
-    } else if (this.armed && name === 'Open_Palm') {
+    } else if (this.armed && name === this.secondPose) {
       this.fired = true;
       return true;
     }

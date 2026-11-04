@@ -39,3 +39,10 @@ test('slow camera inference frames can still complete the release', () => {
   assert.equal(gate.observe('Open_Palm', 0.75, 1, 2400), false);
   assert.equal(gate.observe('Open_Palm', 0.75, 1, 3600), true);
 });
+test('outgoing grab requires palm then fist and fires once', () => {
+  const gate = new GestureSequence('Open_Palm', 'Closed_Fist');
+  assert.equal(hold(gate, 'Closed_Fist', 0), false);
+  assert.equal(hold(gate, 'Open_Palm', 800), false);
+  assert.equal(hold(gate, 'Closed_Fist', 1600), true);
+  assert.equal(hold(gate, 'Closed_Fist', 2400), false);
+});

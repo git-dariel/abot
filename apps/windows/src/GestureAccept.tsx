@@ -7,6 +7,8 @@ type GestureAcceptProps = {
   intro?: string;
   armed?: string;
   action?: string;
+  firstPose?: "Closed_Fist" | "Open_Palm";
+  secondPose?: "Closed_Fist" | "Open_Palm";
 };
 
 export function GestureAccept({
@@ -14,6 +16,8 @@ export function GestureAccept({
   intro = "Trusted incoming offer received. Starting the camera: show a fist, then open your palm to accept.",
   armed = "FIST LOCKED - open your palm to accept this file.",
   action = "accept this file",
+  firstPose = "Closed_Fist",
+  secondPose = "Open_Palm",
 }: GestureAcceptProps) {
   const [enabled, setEnabled] = useState(true);
   const [status, setStatus] = useState(intro);
@@ -27,7 +31,7 @@ export function GestureAccept({
     let stream: MediaStream | undefined;
     let recognizer: GestureRecognizer | undefined;
     let timer = 0;
-    const sequence = new GestureSequence();
+    const sequence = new GestureSequence(firstPose, secondPose);
     const stop = () => {
       window.clearTimeout(timer);
       stream?.getTracks().forEach(track => track.stop());
@@ -73,11 +77,11 @@ export function GestureAccept({
               setStatus(
                 sequence.armed
                   ? armed
-                  : gesture?.categoryName === "Closed_Fist"
-                    ? `Fist found (${confidence}%). Hold it steady.`
+                  : gesture?.categoryName === firstPose
+                    ? `${firstPose === "Open_Palm" ? "Palm" : "Fist"} found (${confidence}%). Hold it steady.`
                     : result.landmarks.length
-                      ? `Hand found, but no clear fist yet (${confidence}%).`
-                      : "Camera ready — hold one closed fist in view.",
+                      ? `Hand found, but no clear ${firstPose === "Open_Palm" ? "palm" : "fist"} yet (${confidence}%).`
+                      : `Camera ready - show one ${firstPose === "Open_Palm" ? "open palm" : "closed fist"}.`,
               );
               if (fire) {
                 disposed = true;
@@ -107,7 +111,7 @@ export function GestureAccept({
       window.removeEventListener("blur", leave);
       stop();
     };
-  }, [enabled, action, armed]);
+  }, [enabled, action, armed, firstPose, secondPose]);
 
   return <div className="gesture-panel">
     <p>{status}</p>

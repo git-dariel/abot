@@ -21,6 +21,7 @@ h1 { margin: 0; font-size: clamp(48px, 9vw, 76px); line-height: .96; letter-spac
 .receiver { border-top: 1px solid #e8e8e8; padding-top: 32px; }
 .send-section { margin-top: 32px; padding-top: 32px; border-top: 1px solid #e8e8e8; }
 .send-card { min-height: 220px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; border: 1px solid #ddd; border-radius: 24px; text-align: center; }
+.send-card.drag-active { border-color: #111; background: #f5f5f5; box-shadow: inset 0 0 0 2px #111; }
 .send-card strong { display: block; max-width: 100%; overflow-wrap: anywhere; font-size: 24px; letter-spacing: -.03em; }
 .send-card > button + button { margin-top: 10px; }
 .receiver-card { min-height: 250px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; border: 1px solid #ddd; border-radius: 24px; text-align: center; }

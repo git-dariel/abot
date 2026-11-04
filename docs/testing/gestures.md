@@ -3,6 +3,8 @@
 ## Implemented
 
 - Windows resolves the OS Downloads folder and creates it if missing. No destination picker is required. Existing filenames still fail safely rather than being overwritten.
+- ABOT Gallery queries only Android MediaStore photos covered by the user's permission grant. Entering the gallery automatically searches for a provisioned trusted receiver; opening a photo previews it and starts the local palm-to-fist camera without separate Select or Gesture buttons.
+- The Windows receiver starts when the desktop app launches. For an identity-approved pending offer, the fist-to-palm acceptance camera starts automatically; buttons remain available for accessibility and recovery.
 - Android: select a document, establish trust, then explicitly open the front camera with **Grab with hand gesture**. Stable open palm followed by stable closed fist offers that file.
 - Windows: review the incoming offer, approve pairing if needed, and enable gesture acceptance. Stable closed fist followed by stable open palm accepts the reviewed offer. A transfer-ID check rejects stale decisions.
 - Both poses require confidence >= 0.8, exactly one detected hand, and a 600 ms hold. The second pose must arrive within 8 seconds. Long frame interruptions reset the sequence; repeated frames cannot re-trigger a completed action.
@@ -11,11 +13,12 @@
 
 ## Physical-device checklist (pending)
 
-1. Start a fresh Windows receiver, reconnect or scan QR, select a small uniquely named Android file.
-2. Enable Android gestures. Verify a fist alone, a brief palm, and two hands do not offer the file. Hold palm then fist; verify exactly one offer appears.
-3. Verify Downloads has no received file before Windows accepts. Review the metadata, enable the Windows camera, hold fist then palm. Verify completion and matching SHA-256.
-4. Repeat with button acceptance, then rejection. Rejection must create no received file.
-5. Test denied camera permission, unavailable camera, back/cancel, rotation, app switching, and repeated gestures. No action may occur after leaving the gesture screen.
-6. Try an existing filename; confirm it is not overwritten. Try a redirected Downloads folder if available.
+1. Open the Windows app and confirm its receiver starts automatically. Reconnect or scan QR once if this installation has no provisioned trusted credential.
+2. On Android, open ABOT Gallery, grant full or selected-photo access, and open a small uniquely named photo. Verify the photo preview and front-camera inset appear automatically.
+3. Verify a fist alone, a brief palm, and two hands do not offer the photo. Hold palm then fist; verify exactly one offer appears.
+4. Verify Downloads has no received file before Windows accepts. Hold a fist then open the palm at Windows; verify completion and matching SHA-256.
+5. Repeat with button acceptance, then rejection. Rejection must create no received file.
+6. Test denied/partial photo permission, denied camera permission, unavailable camera, back/cancel, rotation, app switching, and repeated gestures. No action may occur after leaving the gesture screen.
+7. Try an existing filename; confirm it is not overwritten. Try a redirected Downloads folder if available.
 
 Unit tests exercise gesture event sequences, not camera recognition accuracy. Native WebView camera permission and recognition performance require testing on the user's hardware.

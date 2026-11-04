@@ -44,6 +44,7 @@ const formatBytes = (bytes: number) => {
 export function App() {
   const inputId = useId();
   const fileInput = useRef<HTMLInputElement>(null);
+  const receiverAutoStarted = useRef(false);
   const [files, setFiles] = useState<SelectedFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
@@ -98,6 +99,12 @@ export function App() {
       setIsStartingReceiver(false);
     }
   };
+
+  useEffect(() => {
+    if (!nativeShell || receiverAutoStarted.current) return;
+    receiverAutoStarted.current = true;
+    void startReceiver();
+  }, [nativeShell]);
 
   const decideTransfer = async (accepted: boolean, transferId = receiver.offer?.transferId) => {
     setReceiverError(null);

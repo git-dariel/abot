@@ -3,8 +3,8 @@ import { FilesetResolver, GestureRecognizer } from "@mediapipe/tasks-vision";
 import { GestureSequence } from "./gesture-sequence.mjs";
 
 export function GestureAccept({ onAccept }: { onAccept: () => void }) {
-  const [enabled, setEnabled] = useState(false);
-  const [status, setStatus] = useState("Review the file first. Enable the camera to accept with a fist, then an open palm.");
+  const [enabled, setEnabled] = useState(true);
+  const [status, setStatus] = useState("Trusted incoming offer received. Starting the camera: show a fist, then open your palm to accept.");
   const video = useRef<HTMLVideoElement>(null);
   const accept = useRef(onAccept);
   accept.current = onAccept;
@@ -92,7 +92,7 @@ export function GestureAccept({ onAccept }: { onAccept: () => void }) {
     <p>{status}</p>
     {enabled && <video ref={video} muted playsInline aria-label="Local hand gesture camera preview" />}
     <button type="button" className="secondary" onClick={() => setEnabled(value => !value)}>
-      {enabled ? "Stop camera" : "Enable release gesture to accept"}
+      {enabled ? "Stop release camera" : "Restart release camera"}
     </button>
     <small>Hold each pose briefly. Camera frames stay on this PC.</small>
   </div>;

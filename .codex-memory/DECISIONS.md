@@ -1,5 +1,9 @@
 # Decisions
 
+## ADR-012: Foreground ABOT Gallery gesture flow
+
+Approximate Huawei's documented open-palm-to-fist transfer UX within normal Android application privileges by owning the photo-viewing surface. ABOT Gallery reads only user-granted MediaStore images, reconnects to an already trusted Windows receiver, and opens the local gesture camera automatically when the user opens a photo. The current photo becomes the offer source; palm-to-fist creates the offer, while Windows independently detects fist-to-palm as the receiving user's acceptance before file bytes move. Keep the conventional picker and buttons as fallback. Do not claim integration with another vendor's Gallery, background Android camera access, or cross-camera hand tracking. This supersedes ADR-011's explicit camera-enable step only for the ABOT Gallery and approved-offer fast path.
+
 ## ADR-011: Local opt-in gesture intent
 
 Bundle the pinned MediaPipe Gesture Recognizer model/runtime. Android palm-to-fist offers the already selected document; Windows fist-to-palm accepts the reviewed pending offer only after pairing approval. Require explicit camera activation, one detected hand, confidence >= 0.8, stable 600 ms poses, an 8-second sequence window, and one trigger per camera session. Bind desktop decisions to the displayed transfer UUID. Keep button controls and stop cameras on screen exit. Resolve Windows Downloads through the OS path API by default.

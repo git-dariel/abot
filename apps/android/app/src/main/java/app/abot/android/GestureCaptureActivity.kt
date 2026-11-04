@@ -2,6 +2,7 @@ package app.abot.android
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
@@ -13,10 +14,13 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -28,6 +32,10 @@ import com.google.mediapipe.tasks.vision.gesturerecognizer.GestureRecognizer
 import java.util.concurrent.Executors
 
 class GestureCaptureActivity : ComponentActivity() {
+    companion object {
+        const val EXTRA_MEDIA_URI = "app.abot.android.extra.MEDIA_URI"
+    }
+
     private val worker = Executors.newSingleThreadExecutor()
     private val sequence = GestureSequence()
     private var recognizer: GestureRecognizer? = null
@@ -44,13 +52,36 @@ class GestureCaptureActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         previewView = PreviewView(this)
+        val mediaUri = intent.getStringExtra(EXTRA_MEDIA_URI)?.let(Uri::parse)
         setContent {
             MaterialTheme(colorScheme = darkColorScheme(primary = Color.White, onPrimary = Color.Black)) {
                 Surface(Modifier.fillMaxSize()) {
                     Column(Modifier.systemBarsPadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Text("Grab to offer", style = MaterialTheme.typography.headlineMedium)
-                        Text("Show one open palm, then close it into a fist. Hold each for a moment. This offers your selected file; Windows must still accept.")
-                        AndroidView(factory = { previewView }, modifier = Modifier.fillMaxWidth().weight(1f))
+                        Text("Grab this photo", style = MaterialTheme.typography.headlineMedium)
+                        Text("Show one open palm, then close it into a fist. Windows must independently confirm with its own fist-to-palm gesture before any file bytes move.")
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .background(Color(0xFF111111)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (mediaUri != null) {
+                                MediaStoreImage(
+                                    uri = mediaUri,
+                                    requestedSize = 1600,
+                                    contentScale = ContentScale.Fit,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentDescription = "Photo ready to offer",
+                                )
+                            }
+                            Surface(
+                                modifier = Modifier.align(Alignment.BottomEnd).size(width = 132.dp, height = 176.dp),
+                                color = Color.Black,
+                            ) {
+                                AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+                            }
+                        }
                         Text(message)
                         Text("Camera frames stay on this phone.", style = MaterialTheme.typography.bodySmall)
                         Button(onClick = { finish() }, modifier = Modifier.fillMaxWidth()) { Text("Cancel gesture") }
@@ -112,7 +143,13 @@ class GestureCaptureActivity : ComponentActivity() {
                                 )
                                 val gesture = result.gestures().firstOrNull()?.firstOrNull()
                                 val triggered = sequence.observe(gesture?.categoryName(), gesture?.score() ?: 0f, result.landmarks().size, now)
-                                val status = if (sequence.armed) "Palm recognized. Close your fist to offer." else "Hold an open palm in view."
+                                val status = when {
+                                    sequence.armed && gesture?.categoryName() == "Closed_Fist" -> "Fist found. Hold it steady to offer."
+                                    sequence.armed -> "Palm locked. Close your fist."
+                                    gesture?.categoryName() == "Open_Palm" -> "Palm found. Hold it steady."
+                                    gesture?.categoryName() == "Closed_Fist" -> "Open your palm first."
+                                    else -> "Hold one open palm inside the camera preview."
+                                }
                                 runOnUiThread {
                                     if (running && session == generation && !isFinishing) {
                                         message = status

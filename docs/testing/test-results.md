@@ -1,5 +1,13 @@
 # Test Results
 
+## ABOT Gallery gesture flow - 2026-11-05
+
+- `apps/android/gradlew.bat testDebugUnitTest assembleDebug lintDebug`: passed after setting `ANDROID_HOME` to the installed SDK. The final debug APK is 69,942,615 bytes with SHA-256 `CD94BDE6922298019C34B0CFFD65B8A2AF262DEC4F9230A965BE9AED23D11275`.
+- `pnpm --filter @abot/windows test`: 3 gesture-sequence tests passed.
+- `pnpm --filter @abot/windows typecheck` and `pnpm --filter @abot/windows build`: passed; Vite transformed 34 modules.
+- `adb install -r` succeeded on an authorized Android 15/API 35 Infinix X6880 without clearing ABOT data. Screenshots verified the updated home UI, safe gallery insets, trusted-PC search state, permission handling, and a MediaStore-backed thumbnail grid.
+- Not run: a real palm-to-fist recognition, Windows camera release, encrypted cross-device transfer, matching hash comparison, minimized-window camera validation, or Windows-to-Android transfer. Source/build/device UI evidence must not be described as a successful gesture transfer.
+
 ## Downloads and gestures - 2026-11-05
 
 - Windows gesture gate: 3 Node tests pass (ordered sustained poses, duplicate suppression, low confidence, multiple hands, interruptions, fresh session).

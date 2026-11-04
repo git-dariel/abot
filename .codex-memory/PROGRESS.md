@@ -2,6 +2,7 @@
 
 ## Implemented
 
+- ABOT Gallery fast path: user-granted MediaStore photo grid, automatic trusted-PC discovery on gallery entry, current-photo preview with an automatically started local palm-to-fist recognizer, and the existing encrypted offer pipeline. Windows starts its Downloads receiver on app launch and starts the offer-bound fist-to-palm acceptance camera when a trusted offer appears. The conventional picker/button path remains available.
 - Windows Downloads default and optional local MediaPipe gesture controls: Android palm-to-fist offers a selected file; Windows fist-to-palm accepts a reviewed, identity-approved offer. Models are bundled, and stable-pose gates prevent repeated or brief gestures.
 
 - Repository structure and project governance.
@@ -22,6 +23,7 @@
 
 ## Verified
 
+- On 2026-11-05, Android unit tests, debug APK assembly, and lint passed; Windows gesture tests, TypeScript typecheck, and production UI build passed. The final APK was installed with `adb install -r` on an authorized API 35 Infinix X6880, preserving app data. Real-device screenshots verified the updated home screen, permission-aware ABOT Gallery, trusted-PC discovery status, safe insets, and MediaStore thumbnail grid. No hand-camera or cross-device transfer was performed in this validation.
 - Gesture sequence tests pass on Kotlin and JavaScript; Android unit/APK/lint and Windows TypeScript/UI build pass. Physical-camera recognition and gesture-triggered transfers remain unverified.
 - User confirmed conventional file transfer and trusted-PC reconnect work on their devices.
 
@@ -46,6 +48,7 @@
 
 ## Pending
 
+- Run the complete ABOT Gallery gesture path on hardware: keep Windows ABOT open or minimized, open a phone photo, palm-to-fist offer, fist-to-palm accept at the PC, then record matching file hashes. Windows-to-Android transfer and true close-to-tray/background receiver lifecycle are not implemented.
 - Real-camera hardware validation of the Downloads/gesture slice; see `docs/testing/gestures.md`.
 
 - Record hashes/environment details for the user-reported successful transfer and reconnect. Windows-to-Android transfer, Android asymmetric identity, replay cache, multi-file/cancellation/resume, gesture hardware acceptance, and signed release artifacts remain pending.

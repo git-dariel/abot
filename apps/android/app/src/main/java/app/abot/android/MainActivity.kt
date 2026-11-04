@@ -1,8 +1,12 @@
 package app.abot.android
 
+import android.Manifest
+import android.content.Context
 import android.net.Uri
 import android.content.Intent
 import android.app.Activity
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -34,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +52,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 
@@ -78,6 +84,10 @@ private fun AbotApp() {
     val trustedDevices = remember { TrustedDeviceStore(context) }
     val trustedDiscovery = remember { TrustedDeviceDiscovery(context, trustedDevices) }
     var selectedUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var galleryOpen by rememberSaveable { mutableStateOf(false) }
+    var galleryRefreshKey by rememberSaveable { mutableStateOf(0) }
+    var galleryDiscoveryAttempted by rememberSaveable { mutableStateOf(false) }
+    var hasPhotoAccess by remember { mutableStateOf(hasGalleryPhotoAccess(context)) }
     var pairingLink by rememberSaveable { mutableStateOf("") }
     var verifiedPairingLink by rememberSaveable { mutableStateOf<String?>(null) }
     val verifiedPairing = remember(verifiedPairingLink) {
@@ -127,6 +137,10 @@ private fun AbotApp() {
             progress = 0f
         }
     }
+    val galleryPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        hasPhotoAccess = hasGalleryPhotoAccess(context)
+        if (!hasPhotoAccess) statusMessage = "Photo access is required to show ABOT Gallery."
+    }
     val scanner = rememberLauncherForActivityResult(ScanContract()) { result ->
         result.contents?.let { scanned ->
             try {
@@ -157,6 +171,24 @@ private fun AbotApp() {
             statusMessage = message
             if (value != null) progress = value
         }
+    }
+
+    fun discoverTrustedPc(foundMessage: String = "Trusted Windows receiver ready. Open a photo to continue.") {
+        if (isDiscovering) return
+        isDiscovering = true
+        statusMessage = "Looking for a previously trusted Windows receiver..."
+        trustedDiscovery.discover(
+            onFound = { discovered ->
+                isDiscovering = false
+                applyPairing(discovered.pairing, discovered.restorablePairingLink)
+                pairingTrusted = true
+                statusMessage = foundMessage
+            },
+            onFinished = { message ->
+                isDiscovering = false
+                statusMessage = message
+            },
+        )
     }
 
     fun sendFile() {
@@ -221,9 +253,41 @@ private fun AbotApp() {
         if (result.resultCode == Activity.RESULT_OK) sendFile()
     }
 
+    fun openGestureFor(document: Uri) {
+        if (isBusy) return
+        selectedUri = document
+        transferState = TransferState.FILE_SELECTED
+        statusMessage = "Photo ready. Hold an open palm, then close your fist to offer it."
+        progress = 0f
+        gestureLauncher.launch(
+            Intent(context, GestureCaptureActivity::class.java)
+                .putExtra(GestureCaptureActivity.EXTRA_MEDIA_URI, document.toString()),
+        )
+    }
+
+    val receiverReady = verifiedPairing != null && pairingTrusted
+    LaunchedEffect(galleryOpen, receiverReady, trustedReconnectReady) {
+        if (galleryOpen && !receiverReady && trustedReconnectReady && !galleryDiscoveryAttempted) {
+            galleryDiscoveryAttempted = true
+            discoverTrustedPc()
+        }
+    }
+
     MaterialTheme(colorScheme = AbotColorScheme) {
         Surface(modifier = Modifier.fillMaxSize()) {
-            Column(
+            if (galleryOpen) {
+                AbotGalleryScreen(
+                    hasPhotoAccess = hasPhotoAccess,
+                    receiverReady = receiverReady,
+                    isDiscovering = isDiscovering,
+                    isBusy = isBusy,
+                    statusMessage = statusMessage,
+                    refreshKey = galleryRefreshKey,
+                    onBack = { galleryOpen = false },
+                    onRequestAccess = { galleryPermission.launch(galleryPermissions()) },
+                    onOpenPhoto = ::openGestureFor,
+                )
+            } else Column(
                 modifier = Modifier
                     .statusBarsPadding()
                     .navigationBarsPadding()
@@ -239,7 +303,7 @@ private fun AbotApp() {
                 }
                 Text("Send to Windows", fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
                 Text(
-                    "Pair with your PC, choose a file, then wait for Windows to accept it.",
+                    "Pair once, open ABOT Gallery, then grab the photo you are viewing.",
                     color = Color.LightGray,
                     fontSize = 15.sp,
                     lineHeight = 21.sp,
@@ -253,20 +317,7 @@ private fun AbotApp() {
                     trustedReconnectReady = trustedReconnectReady,
                     isBusy = isBusy,
                     onDiscover = {
-                        isDiscovering = true
-                        statusMessage = "Looking for a previously trusted Windows receiver..."
-                        trustedDiscovery.discover(
-                            onFound = { discovered ->
-                                isDiscovering = false
-                                applyPairing(discovered.pairing, discovered.restorablePairingLink)
-                                pairingTrusted = true
-                                statusMessage = "Trusted Windows receiver found. Choose a file to continue."
-                            },
-                            onFinished = { message ->
-                                isDiscovering = false
-                                statusMessage = message
-                            },
-                        )
+                        discoverTrustedPc("Trusted Windows receiver found. Open ABOT Gallery or choose a file.")
                     },
                     onScan = {
                         scanner.launch(
@@ -312,9 +363,14 @@ private fun AbotApp() {
                     transferState = transferState,
                     progress = progress,
                     statusMessage = statusMessage,
+                    onOpenGallery = {
+                        galleryDiscoveryAttempted = false
+                        galleryRefreshKey += 1
+                        galleryOpen = true
+                    },
                     onChooseFile = { picker.launch(arrayOf("*/*")) },
                     onSend = ::sendFile,
-                    onGesture = { gestureLauncher.launch(Intent(context, GestureCaptureActivity::class.java)) },
+                    onGesture = { selectedUri?.let(::openGestureFor) },
                 )
             }
         }
@@ -430,13 +486,23 @@ private fun TransferCard(
     transferState: TransferState,
     progress: Float,
     statusMessage: String,
+    onOpenGallery: () -> Unit,
     onChooseFile: () -> Unit,
     onSend: () -> Unit,
     onGesture: () -> Unit,
 ) {
     Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("2. CHOOSE AND SEND", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+            Text("2. OPEN AND GRAB", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+            Button(onClick = onOpenGallery, enabled = !isBusy, colors = monochromeButtonColors(), modifier = Modifier.fillMaxWidth()) {
+                Text("Open ABOT Gallery", fontWeight = FontWeight.Bold)
+            }
+            Text(
+                "Open a photo and the gesture camera starts automatically. No separate Select or Gesture button.",
+                color = Color.LightGray,
+                fontSize = 13.sp,
+            )
+            Text("FILE PICKER FALLBACK", color = Color.LightGray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             Text(if (hasFile) "File ready to offer" else "No file selected", fontSize = 20.sp, fontWeight = FontWeight.Bold)
             OutlinedButton(onClick = onChooseFile, enabled = !isBusy, modifier = Modifier.fillMaxWidth()) {
                 Text(if (hasFile) "Change file" else "Select file", fontWeight = FontWeight.Bold)
@@ -456,7 +522,7 @@ private fun TransferCard(
 }
 
 @Composable
-private fun monochromeButtonColors() = ButtonDefaults.buttonColors(
+internal fun monochromeButtonColors() = ButtonDefaults.buttonColors(
     containerColor = Color.White,
     contentColor = Color.Black,
     disabledContainerColor = Color.DarkGray,
@@ -473,4 +539,17 @@ private fun formatBytes(bytes: Long): String {
         unit += 1
     }
     return "%.1f %s".format(value, units[unit])
+}
+
+private fun galleryPermissions(): Array<String> = when {
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> arrayOf(
+        Manifest.permission.READ_MEDIA_IMAGES,
+        Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
+    )
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> arrayOf(Manifest.permission.READ_MEDIA_IMAGES)
+    else -> arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+}
+
+private fun hasGalleryPhotoAccess(context: Context): Boolean = galleryPermissions().any { permission ->
+    ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 }

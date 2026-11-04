@@ -42,10 +42,11 @@
 
 ## Gesture and Downloads slice
 
-- Implemented: automatic Windows Downloads destination; Android palm-to-fist offer and Windows fist-to-palm acceptance using local MediaPipe, explicit camera enablement, single-hand confidence/hold checks, one-shot sequences, and offer-bound decisions.
+- Implemented: automatic Windows Downloads destination; Android palm-to-fist offer and Windows fist-to-palm acceptance using local MediaPipe, single-hand confidence/hold checks, one-shot sequences, and offer-bound decisions. ABOT Gallery now shows user-granted phone photos, automatically searches for a trusted PC, previews the opened photo with an automatically started gesture camera, and feeds the result into the existing encrypted offer path. Windows now starts its receiver on app launch and starts the acceptance camera for an approved pending offer.
 - Tested: see `docs/testing/test-results.md` for current build and sequence-test results.
+- Device-checked: the final APK was installed on an authorized API 35 phone; the updated home screen, permission-aware gallery, discovery state, insets, and real MediaStore thumbnail grid rendered correctly.
 - User-reported: conventional file transfer and trusted-PC reconnect work on the user's devices.
-- Pending: real-camera gesture transfer, camera permission/lifecycle scenarios, and recorded file hashes/environment details from `docs/testing/gestures.md`.
+- Pending: real-camera ABOT Gallery transfer, Windows minimized-camera behavior, camera permission/lifecycle scenarios, and recorded file hashes/environment details from `docs/testing/gestures.md`. Windows-to-Android transfer and close-to-tray receiver lifecycle remain later milestones. Another vendor's Gallery cannot supply its current photo to ABOT under normal Android application privileges.
 
 ## Milestones 5–10
 

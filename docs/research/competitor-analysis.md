@@ -16,13 +16,13 @@
 - **Confidence:** high for documented UX.
 - **Impact:** integrate platform file pickers/share affordances and make completion destinations obvious, without inheriting account or manufacturer dependencies.
 
-## Huawei Share OneHop
+## Huawei air gesture transfer
 
-- **Source:** <https://consumer.huawei.com/en/support/content/en-us15957630/>
-- **Observation:** the documented OneHop flow requires Huawei ecosystem capabilities and physical NFC-area interaction; it is not evidence of camera-based continuous hand tracking.
-- **Evidence:** Huawei's public support workflow.
-- **Confidence:** high for the documented flow; no proprietary implementation was examined.
-- **Impact:** ABOT must be independently implemented and use explicit camera gesture states plus ordinary controls.
+- **Sources:** <https://consumer.huawei.com/cn/support/content/zh-cn16090787/> and <https://consumer.huawei.com/cn/support/content/zh-cn16046165/>
+- **Observation:** Huawei documents a system setting available on supported HarmonyOS 5+ devices and integrated scenarios. The sender opens supported content, holds an open palm 20-40 cm from the screen, closes the fist to grab, moves that fist toward another supported unlocked device, and opens the palm to release. The HarmonyOS 6 documentation includes supported Huawei phones, tablets, and HarmonyOS computers.
+- **Evidence:** Huawei's public support workflow and supported-product/version lists.
+- **Confidence:** high for documented behavior and compatibility; implementation internals were not inspected.
+- **Impact:** ABOT can reproduce the intent sequence inside its own foreground Android Gallery and Windows app, but it must not claim OS-wide integration, another Gallery app's active-photo access, continuous cross-camera hand tracking, or unrestricted background camera use.
 
 ## LocalSend
 

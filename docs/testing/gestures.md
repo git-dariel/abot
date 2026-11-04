@@ -7,7 +7,8 @@
 - The Windows receiver starts when the desktop app launches. For an identity-approved pending offer, the fist-to-palm acceptance camera starts automatically; buttons remain available for accessibility and recovery.
 - Android: select a document, establish trust, then explicitly open the front camera with **Grab with hand gesture**. Stable open palm followed by stable closed fist offers that file.
 - Windows: review the incoming offer, approve pairing if needed, and enable gesture acceptance. Stable closed fist followed by stable open palm accepts the reviewed offer. A transfer-ID check rejects stale decisions.
-- Both poses require confidence >= 0.8, exactly one detected hand, and a 600 ms hold. The second pose must arrive within 8 seconds. Long frame interruptions reset the sequence; repeated frames cannot re-trigger a completed action.
+- Both poses require confidence >= 0.55, exactly one detected hand, and a 350 ms hold. The second pose must arrive within 12 seconds. Frame gaps longer than 3 seconds reset the sequence, allowing slower phones to retain deliberate poses without accepting stale input; repeated frames cannot re-trigger a completed action.
+- Android displays the detected pose/confidence, vibrates when the palm locks and grab completes, and reports when the offer reaches Windows or the connection fails. Windows displays camera-ready, fist-confidence, and fist-locked states.
 - Cameras stop on cancellation, leaving the screen, or completion. Windows also stops on focus loss after initialization. Camera permission/model errors retain ordinary button controls.
 - Model and runtime are bundled locally. No camera data is sent over the network. This is gesture intent on each device, not tracking one hand between cameras.
 

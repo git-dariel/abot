@@ -32,3 +32,10 @@ test('new offer or camera session requires a fresh sequence', () => {
   gate.reset();
   assert.equal(hold(gate, 'Open_Palm', 800), false);
 });
+test('slow camera inference frames can still complete the release', () => {
+  const gate = new GestureSequence();
+  assert.equal(gate.observe('Closed_Fist', 0.75, 1, 0), false);
+  assert.equal(gate.observe('Closed_Fist', 0.75, 1, 1200), false);
+  assert.equal(gate.observe('Open_Palm', 0.75, 1, 2400), false);
+  assert.equal(gate.observe('Open_Palm', 0.75, 1, 3600), true);
+});

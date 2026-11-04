@@ -5,6 +5,8 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
+import android.util.Log
+import android.view.HapticFeedbackConstants
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -34,6 +36,7 @@ import java.util.concurrent.Executors
 class GestureCaptureActivity : ComponentActivity() {
     companion object {
         const val EXTRA_MEDIA_URI = "app.abot.android.extra.MEDIA_URI"
+        private const val TAG = "ABOT-Gesture"
     }
 
     private val worker = Executors.newSingleThreadExecutor()
@@ -44,6 +47,7 @@ class GestureCaptureActivity : ComponentActivity() {
     private lateinit var previewView: PreviewView
     @Volatile private var running = false
     @Volatile private var generation = 0
+    private var lastDiagnosticLog = 0L
     private var message by mutableStateOf("Camera starting...")
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) startCamera() else message = "Camera permission denied. Go back and use Offer file to Windows."
@@ -76,7 +80,7 @@ class GestureCaptureActivity : ComponentActivity() {
                                 )
                             }
                             Surface(
-                                modifier = Modifier.align(Alignment.BottomEnd).size(width = 132.dp, height = 176.dp),
+                                modifier = Modifier.align(Alignment.BottomEnd).size(width = 180.dp, height = 240.dp),
                                 color = Color.Black,
                             ) {
                                 AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
@@ -123,6 +127,7 @@ class GestureCaptureActivity : ComponentActivity() {
                                 .setNumHands(2)
                                 .build(),
                         )
+                        Log.i(TAG, "MediaPipe recognizer ready")
                     } catch (_: Exception) {
                         runOnUiThread { if (session == generation) stopWithError("Gesture model could not start. Use the send button instead.") }
                     }
@@ -142,21 +147,36 @@ class GestureCaptureActivity : ComponentActivity() {
                                     now,
                                 )
                                 val gesture = result.gestures().firstOrNull()?.firstOrNull()
+                                val wasArmed = sequence.armed
                                 val triggered = sequence.observe(gesture?.categoryName(), gesture?.score() ?: 0f, result.landmarks().size, now)
+                                if (now - lastDiagnosticLog >= 1_000) {
+                                    lastDiagnosticLog = now
+                                    Log.d(TAG, "hands=${result.landmarks().size} pose=${gesture?.categoryName()} confidence=${gesture?.score()} armed=${sequence.armed}")
+                                }
+                                val confidence = ((gesture?.score() ?: 0f) * 100).toInt()
                                 val status = when {
-                                    sequence.armed && gesture?.categoryName() == "Closed_Fist" -> "Fist found. Hold it steady to offer."
-                                    sequence.armed -> "Palm locked. Close your fist."
-                                    gesture?.categoryName() == "Open_Palm" -> "Palm found. Hold it steady."
-                                    gesture?.categoryName() == "Closed_Fist" -> "Open your palm first."
-                                    else -> "Hold one open palm inside the camera preview."
+                                    triggered -> "PHOTO GRABBED — sending the offer to Windows..."
+                                    sequence.armed && gesture?.categoryName() == "Closed_Fist" -> "Fist found ($confidence%). Keep it closed."
+                                    sequence.armed -> "PALM LOCKED — now close your fist."
+                                    gesture?.categoryName() == "Open_Palm" && gesture.score() >= GestureSequence.MIN_CONFIDENCE -> "Palm found ($confidence%). Hold it steady."
+                                    gesture?.categoryName() == "Closed_Fist" -> "Fist found ($confidence%). Open your palm first."
+                                    result.landmarks().isNotEmpty() -> "Hand found, but no clear palm yet ($confidence%). Move it fully inside the preview."
+                                    else -> "No hand detected. Show one open palm inside the camera preview."
                                 }
                                 runOnUiThread {
                                     if (running && session == generation && !isFinishing) {
                                         message = status
+                                        if (!wasArmed && sequence.armed) {
+                                            previewView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                        }
                                         if (triggered) {
                                             running = false
+                                            analysis?.clearAnalyzer()
+                                            provider?.unbindAll()
+                                            previewView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                            Log.i(TAG, "Palm-to-fist sequence triggered")
                                             setResult(RESULT_OK)
-                                            finish()
+                                            previewView.postDelayed({ if (!isFinishing) finish() }, 500)
                                         }
                                     }
                                 }

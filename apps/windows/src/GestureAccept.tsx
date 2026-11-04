@@ -57,7 +57,16 @@ export function GestureAccept({ onAccept }: { onAccept: () => void }) {
               const result = recognizer.recognizeForVideo(element, performance.now());
               const gesture = result.gestures[0]?.[0];
               const fire = sequence.observe(gesture?.categoryName ?? null, gesture?.score ?? 0, result.landmarks.length, performance.now());
-              setStatus(sequence.armed ? "Fist recognized. Open your palm to accept this file." : "Hold one closed fist in view.");
+              const confidence = Math.round((gesture?.score ?? 0) * 100);
+              setStatus(
+                sequence.armed
+                  ? "FIST LOCKED — open your palm to accept this file."
+                  : gesture?.categoryName === "Closed_Fist"
+                    ? `Fist found (${confidence}%). Hold it steady.`
+                    : result.landmarks.length
+                      ? `Hand found, but no clear fist yet (${confidence}%).`
+                      : "Camera ready — hold one closed fist in view.",
+              );
               if (fire) {
                 disposed = true;
                 stop();

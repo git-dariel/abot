@@ -43,6 +43,7 @@
 ## Gesture and Downloads slice
 
 - Implemented: automatic Windows Downloads destination; Android palm-to-fist offer and Windows fist-to-palm acceptance using local MediaPipe, single-hand confidence/hold checks, one-shot sequences, and offer-bound decisions. ABOT Gallery now shows user-granted phone photos, automatically searches for a trusted PC, previews the opened photo with an automatically started gesture camera, and feeds the result into the existing encrypted offer path. Windows now starts its receiver on app launch and starts the acceptance camera for an approved pending offer.
+- Reliability update: both gesture gates tolerate slow on-device inference, use a 55% supported-pose threshold with a 350 ms stable hold, and expose live pose/confidence state. Android adds haptic palm/grab confirmation plus explicit offer-ready and connection-failure messages; the ordered single-hand sequence and receiver consent boundary remain enforced.
 - Tested: see `docs/testing/test-results.md` for current build and sequence-test results.
 - Device-checked: the final APK was installed on an authorized API 35 phone; the updated home screen, permission-aware gallery, discovery state, insets, and real MediaStore thumbnail grid rendered correctly.
 - User-reported: conventional file transfer and trusted-PC reconnect work on the user's devices.

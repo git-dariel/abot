@@ -1,5 +1,13 @@
 # Test Results
 
+## Gesture recognition reliability repair - 2026-11-05
+
+- Phone log history showed `GestureCaptureActivity` remaining active for approximately 38 seconds without a crash; no application-level recognition telemetry existed. This supported a recognition/gating diagnosis rather than an Activity or CameraX crash diagnosis.
+- Android now logs pose/confidence/armed state under `ABOT-Gesture`, tolerates slow inference frames, and provides visible/haptic state transitions. A new slow-frame unit test passes alongside the existing gesture tests.
+- `apps/android/gradlew.bat testDebugUnitTest assembleDebug lintDebug`: passed. The installed debug APK is 69,942,615 bytes with SHA-256 `5BCFD17A724347758EE902C6D320E55BF8A91268B721E90084AF247D30886CAC`.
+- Windows gesture tests: 4 passed, including a slow-frame release sequence. TypeScript typecheck and the Vite production build passed.
+- The rebuilt Tauri development executable launched successfully. Not yet verified: physical palm/fist classification, offer arrival, Windows camera release, saved file, or matching cross-device hashes.
+
 ## ABOT Gallery gesture flow - 2026-11-05
 
 - `apps/android/gradlew.bat testDebugUnitTest assembleDebug lintDebug`: passed after setting `ANDROID_HOME` to the installed SDK. The final debug APK is 69,942,615 bytes with SHA-256 `CD94BDE6922298019C34B0CFFD65B8A2AF262DEC4F9230A965BE9AED23D11275`.

@@ -33,4 +33,12 @@ class GestureSequenceTest {
         gate.reset()
         assertFalse(hold(gate, "Closed_Fist", 6000))
     }
+
+    @Test fun toleratesSlowOnDeviceInferenceFrames() {
+        val gate = GestureSequence()
+        assertFalse(gate.observe("Open_Palm", 0.75f, 1, 0))
+        assertFalse(gate.observe("Open_Palm", 0.75f, 1, 1_200))
+        assertFalse(gate.observe("Closed_Fist", 0.75f, 1, 2_400))
+        assertTrue(gate.observe("Closed_Fist", 0.75f, 1, 3_600))
+    }
 }

@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -212,8 +213,15 @@ private fun AbotApp() {
                     onOfferSent = {
                         updateState(
                             TransferState.AWAITING_REMOTE_CONFIRMATION,
-                            "Offer sent. Waiting for Windows approval; no file bytes have been sent.",
+                            "Offer reached Windows. Hold a fist at the PC camera, then open your palm. No file bytes have been sent yet.",
                         )
+                        mainHandler.post {
+                            Toast.makeText(
+                                context,
+                                "Windows is ready: hold a fist at the PC, then open your palm.",
+                                Toast.LENGTH_LONG,
+                            ).show()
+                        }
                     },
                     onAccepted = {
                         updateState(TransferState.ACCEPTED, "Accepted. Starting encrypted upload...")
@@ -245,12 +253,18 @@ private fun AbotApp() {
                     TransferState.FAILED,
                     detail ?: "Transfer failed. Confirm both devices are on the same local network and try again.",
                 )
+                mainHandler.post {
+                    Toast.makeText(context, detail ?: "Could not reach Windows.", Toast.LENGTH_LONG).show()
+                }
             }
         }.start()
     }
 
     val gestureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) sendFile()
+        if (result.resultCode == Activity.RESULT_OK) {
+            Toast.makeText(context, "Photo grabbed. Preparing the Windows offer...", Toast.LENGTH_SHORT).show()
+            sendFile()
+        }
     }
 
     fun openGestureFor(document: Uri) {

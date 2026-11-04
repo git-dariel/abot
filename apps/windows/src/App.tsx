@@ -1,15 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
-import type { ChangeEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GestureAccept } from "./GestureAccept";
-
-type SelectedFile = {
-  id?: string;
-  name: string;
-  size: number;
-  type?: string;
-  sha256?: string;
-};
 
 type IncomingOffer = {
   transferId: string;
@@ -42,39 +33,13 @@ const formatBytes = (bytes: number) => {
 };
 
 export function App() {
-  const inputId = useId();
-  const fileInput = useRef<HTMLInputElement>(null);
   const receiverAutoStarted = useRef(false);
-  const [files, setFiles] = useState<SelectedFile[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [isSelecting, setIsSelecting] = useState(false);
   const [receiver, setReceiver] = useState<ReceiverSnapshot>({ state: "stopped", pairingApproved: false, trustedDiscoveryAvailable: false, trustedReconnect: false });
   const [receiverError, setReceiverError] = useState<string | null>(null);
   const [isStartingReceiver, setIsStartingReceiver] = useState(false);
+  const [showPairing, setShowPairing] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const nativeShell = isTauri();
-  const totalBytes = useMemo(() => files.reduce((total, file) => total + file.size, 0), [files]);
-
-  const selectFiles = (event: ChangeEvent<HTMLInputElement>) => {
-    setError(null);
-    setFiles(Array.from(event.target.files ?? [], ({ name, size, type }) => ({ name, size, type })));
-  };
-
-  const chooseFiles = async () => {
-    if (!nativeShell) {
-      fileInput.current?.click();
-      return;
-    }
-    setError(null);
-    setIsSelecting(true);
-    try {
-      const selected = await invoke<SelectedFile[]>("select_files");
-      if (selected.length > 0) setFiles(selected);
-    } catch (reason) {
-      setError(typeof reason === "string" ? reason : "Files could not be selected");
-    } finally {
-      setIsSelecting(false);
-    }
-  };
 
   useEffect(() => {
     if (!nativeShell || receiver.state === "stopped") return;
@@ -106,6 +71,22 @@ export function App() {
     void startReceiver();
   }, [nativeShell]);
 
+  useEffect(() => {
+    if (receiver.state !== "completed" && receiver.state !== "rejected") return;
+    if (receiver.state === "completed") {
+      const name = receiver.savedPath?.split(/[\\/]/).pop();
+      setToast(name ? `${name} received and saved to Downloads.` : "File received and saved to Downloads.");
+    }
+    const restart = window.setTimeout(() => void startReceiver(), 900);
+    return () => window.clearTimeout(restart);
+  }, [receiver.state, receiver.savedPath]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const hide = window.setTimeout(() => setToast(null), 4_500);
+    return () => window.clearTimeout(hide);
+  }, [toast]);
+
   const decideTransfer = async (accepted: boolean, transferId = receiver.offer?.transferId) => {
     setReceiverError(null);
     try {
@@ -125,118 +106,78 @@ export function App() {
   };
 
   return (
-    <main>
+    <main className="app-shell">
       <header>
         <a className="brand" href="#top" aria-label="ABOT home">abot.</a>
-        <span className="status"><span aria-hidden="true" /> {nativeShell ? "Native shell ready" : "Browser development mode"}</span>
+        <span className="status"><span aria-hidden="true" /> {receiver.state === "stopped" ? "Offline" : "Ready"}</span>
       </header>
 
       <section className="hero" id="top">
-        <p className="eyebrow">GESTURE-POWERED FILE SHARING</p>
-        <h1>Abot mo, <em>salo ko.</em></h1>
-        <p className="lede">Local-first file sharing for Android and Windows. Send one file over an encrypted connection, with approval on this PC before any file bytes move.</p>
+        <p className="eyebrow">LOCAL FILE TRANSFER</p>
+        <h1>Ready when<br />you are.</h1>
+        <p className="lede">Keep ABOT open. Trusted phones reconnect automatically and received files go to Downloads.</p>
       </section>
 
       <section className="receiver" aria-labelledby="receive-heading">
-        <div>
-          <p className="step">01 / RECEIVE</p>
-          <h2 id="receive-heading">Receive from Android</h2>
-          <p>Files are saved to Downloads after you accept. Start receiving, then scan the QR or use Find trusted PC on Android.</p>
-        </div>
         <div className="receiver-card" aria-live="polite">
           {receiver.state === "stopped" && (
             <button type="button" onClick={startReceiver} disabled={!nativeShell || isStartingReceiver}>
-              {isStartingReceiver ? "Starting receiver…" : "Start receiving to Downloads"}
+              {isStartingReceiver ? "Starting…" : "Start ABOT"}
             </button>
           )}
           {receiver.state === "waiting" && receiver.pairingUri && (
             <>
-              <strong>Scan with ABOT on Android</strong>
-              {receiver.pairingQrDataUrl && <img className="pairing-qr" src={receiver.pairingQrDataUrl} alt="Signed ABOT pairing QR code" />}
-              {receiver.trustedReconnect
-                ? <p>Trusted Android device reconnected.</p>
-                : <p className="pairing-code" aria-label={`Pairing code ${receiver.pairingCode}`}>{receiver.pairingCode}</p>}
-              <p>Confirm this same code appears on Android.</p>
-              <button type="button" onClick={() => void approvePairing()} disabled={receiver.pairingApproved}>
-                {receiver.pairingApproved ? "This PC approved" : "Code matches on Android"}
+              <div className="ready-mark" aria-hidden="true">✓</div>
+              <strong id="receive-heading">Ready to receive</strong>
+              <p className="muted">Trusted phones connect automatically.</p>
+              <button className="secondary compact" type="button" onClick={() => setShowPairing(value => !value)}>
+                {showPairing ? "Hide pairing" : "Pair a new phone"}
               </button>
-              <details><summary>Manual pairing link</summary><code>{receiver.pairingUri}</code></details>
-              <small>Endpoint {receiver.endpoint} · Identity {receiver.identityFingerprint?.slice(0, 16)}…</small>
-              <small>{receiver.trustedDiscoveryAvailable ? "Trusted-device discovery is active" : "Discovery unavailable; use the QR code"}</small>
+              {showPairing && <div className="pairing-panel">
+                {receiver.pairingQrDataUrl && <img className="pairing-qr" src={receiver.pairingQrDataUrl} alt="Signed ABOT pairing QR code" />}
+                <p className="pairing-code" aria-label={`Pairing code ${receiver.pairingCode}`}>{receiver.pairingCode}</p>
+                <p className="muted">Scan once, confirm the same code, then future sessions reconnect automatically.</p>
+                <button type="button" onClick={() => void approvePairing()} disabled={receiver.pairingApproved}>
+                  {receiver.pairingApproved ? "PC approved" : "Code matches"}
+                </button>
+              </div>}
             </>
           )}
           {receiver.state === "offerPending" && receiver.offer && (
             <>
-              <strong>Incoming file</strong>
-              {receiver.trustedReconnect
-                ? <p>Trusted Android device authenticated.</p>
-                : <p className="pairing-code" aria-label={`Pairing code ${receiver.pairingCode}`}>{receiver.pairingCode}</p>}
+              <p className="eyebrow">INCOMING</p>
+              <strong>Catch this file</strong>
               <p className="incoming-name">{receiver.offer.name}</p>
-              <small>{formatBytes(receiver.offer.size)} · SHA-256 {receiver.offer.sha256.slice(0, 16)}…</small>
+              <small>{formatBytes(receiver.offer.size)}</small>
               <div className="decision-actions">
-                <button type="button" onClick={() => void decideTransfer(true)} disabled={!receiver.pairingApproved}>Accept and receive</button>
+                <button type="button" onClick={() => void decideTransfer(true)} disabled={!receiver.pairingApproved}>Receive</button>
                 <button className="secondary" type="button" onClick={() => void decideTransfer(false)}>Reject</button>
               </div>
-              {!receiver.pairingApproved && <button className="pairing-approval" type="button" onClick={() => void approvePairing()}>Code matches on Android</button>}
+              {!receiver.pairingApproved && <button className="pairing-approval" type="button" onClick={() => void approvePairing()}>Code matches</button>}
               {receiver.pairingApproved && <GestureAccept key={receiver.offer.transferId} onAccept={() => void decideTransfer(true, receiver.offer?.transferId)} />}
             </>
           )}
-          {receiver.state === "receiving" && <strong>Receiving encrypted file…</strong>}
-          {receiver.state === "rejected" && <strong>Transfer rejected. No file bytes were accepted.</strong>}
+          {receiver.state === "receiving" && <><div className="pulse" /><strong>Receiving securely…</strong></>}
+          {receiver.state === "rejected" && <strong>Rejected. Re-arming ABOT…</strong>}
           {receiver.state === "completed" && (
             <>
-              <strong>File received and verified</strong>
-              <p>{receiver.savedPath}</p>
-              {receiver.error && <p className="inline-error">{receiver.error}</p>}
-              <button type="button" onClick={startReceiver}>Receive another file</button>
+              <div className="ready-mark" aria-hidden="true">✓</div>
+              <strong>Received</strong>
+              <p className="muted">Re-arming automatically…</p>
             </>
           )}
           {receiver.state === "failed" && (
             <>
               <strong>Transfer failed</strong>
               <p className="inline-error">{receiver.error}</p>
-              <button type="button" onClick={startReceiver}>Start again</button>
+              <button type="button" onClick={startReceiver}>Try again</button>
             </>
           )}
-          {!nativeShell && <p className="notice">Receiving requires the native Windows app.</p>}
+          {!nativeShell && <p className="notice">Open this page in the native Windows app.</p>}
           {receiverError && <p className="inline-error" role="alert">{receiverError}</p>}
         </div>
       </section>
-
-      <section className="workspace" aria-labelledby="send-heading">
-        <div>
-          <p className="step">01 / SELECT</p>
-          <h2 id="send-heading">Choose what to send</h2>
-          <p>The receiver must accept the offer before ABOT sends any bytes.</p>
-        </div>
-
-        <button className="drop-zone" type="button" onClick={chooseFiles} disabled={isSelecting}>
-          <span className="plus" aria-hidden="true">+</span>
-          <strong>{isSelecting ? "Preparing files…" : files.length ? "Change selection" : "Select files"}</strong>
-          <span>{nativeShell ? "Native selection with streamed SHA-256" : "Browser metadata preview"}</span>
-        </button>
-        <input ref={fileInput} id={inputId} className="visually-hidden" type="file" multiple onChange={selectFiles} />
-        {error && <p className="error" role="alert">{error}</p>}
-
-        {files.length > 0 && (
-          <div className="selection" aria-live="polite">
-            <div className="selection-summary">
-              <strong>{files.length} {files.length === 1 ? "file" : "files"}</strong>
-              <span>{formatBytes(totalBytes)}</span>
-            </div>
-            <ul>
-              {files.map((file, index) => (
-                <li key={file.id ?? `${file.name}-${index}`}>
-                  <span>{file.name}{file.sha256 && <small className="digest">SHA-256 {file.sha256.slice(0, 12)}…</small>}</span>
-                  <small>{formatBytes(file.size)}</small>
-                </li>
-              ))}
-            </ul>
-            <button type="button" disabled title="Windows-to-Android sending is a later milestone">Send to Android</button>
-            <p className="notice">This milestone implements Android → Windows first.</p>
-          </div>
-        )}
-      </section>
+      {toast && <div className="toast" role="status">✓ {toast}</div>}
     </main>
   );
 }

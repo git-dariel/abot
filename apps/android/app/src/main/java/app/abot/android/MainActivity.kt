@@ -30,13 +30,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -50,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,18 +61,18 @@ import androidx.core.content.ContextCompat
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 
-private val AbotColorScheme = darkColorScheme(
-    primary = Color.White,
-    onPrimary = Color.Black,
-    background = Color.Black,
-    onBackground = Color.White,
-    surface = Color(0xFF111111),
-    onSurface = Color.White,
-    surfaceVariant = Color(0xFF1C1C1C),
-    onSurfaceVariant = Color(0xFFE0E0E0),
-    outline = Color.White,
-    error = Color.White,
-    onError = Color.Black,
+private val AbotColorScheme = lightColorScheme(
+    primary = Color.Black,
+    onPrimary = Color.White,
+    background = Color.White,
+    onBackground = Color(0xFF111111),
+    surface = Color.White,
+    onSurface = Color(0xFF111111),
+    surfaceVariant = Color(0xFFF4F4F4),
+    onSurfaceVariant = Color(0xFF444444),
+    outline = Color(0xFFBDBDBD),
+    error = Color(0xFF9F1C1C),
+    onError = Color.White,
 )
 
 class MainActivity : ComponentActivity() {
@@ -88,6 +92,8 @@ private fun AbotApp() {
     var galleryOpen by rememberSaveable { mutableStateOf(false) }
     var galleryRefreshKey by rememberSaveable { mutableStateOf(0) }
     var galleryDiscoveryAttempted by rememberSaveable { mutableStateOf(false) }
+    var discoveryRetryToken by rememberSaveable { mutableStateOf(0) }
+    var showAdvanced by rememberSaveable { mutableStateOf(false) }
     var hasPhotoAccess by remember { mutableStateOf(hasGalleryPhotoAccess(context)) }
     var pairingLink by rememberSaveable { mutableStateOf("") }
     var verifiedPairingLink by rememberSaveable { mutableStateOf<String?>(null) }
@@ -103,7 +109,9 @@ private fun AbotApp() {
         mutableStateOf(trustedDevices.hasProvisionedReconnectCredential())
     }
     var transferState by remember { mutableStateOf(TransferState.IDLE) }
-    var statusMessage by rememberSaveable { mutableStateOf("Scan the QR code shown on Windows.") }
+    var statusMessage by rememberSaveable {
+        mutableStateOf(if (trustedReconnectReady) "Finding your trusted PC..." else "Scan once to pair this phone.")
+    }
     var progress by remember { mutableFloatStateOf(0f) }
     val isBusy = transferState in setOf(
         TransferState.TRANSFER_OFFERED,
@@ -188,6 +196,12 @@ private fun AbotApp() {
             onFinished = { message ->
                 isDiscovering = false
                 statusMessage = message
+                if (trustedReconnectReady) {
+                    mainHandler.postDelayed({
+                        galleryDiscoveryAttempted = false
+                        discoveryRetryToken += 1
+                    }, 3_000)
+                }
             },
         )
     }
@@ -244,6 +258,15 @@ private fun AbotApp() {
                     "${result.fileName} was received, verified, and saved on Windows.",
                     1f,
                 )
+                mainHandler.postDelayed({
+                    selectedUri = null
+                    verifiedPairingLink = null
+                    pairingTrusted = false
+                    galleryDiscoveryAttempted = false
+                    discoveryRetryToken += 1
+                    transferState = TransferState.IDLE
+                    statusMessage = "Ready for another photo. Reconnecting automatically..."
+                }, 1_500)
             } catch (error: Exception) {
                 val detail = when (error) {
                     is IllegalArgumentException, is IllegalStateException -> error.message
@@ -280,8 +303,8 @@ private fun AbotApp() {
     }
 
     val receiverReady = verifiedPairing != null && pairingTrusted
-    LaunchedEffect(galleryOpen, receiverReady, trustedReconnectReady) {
-        if (galleryOpen && !receiverReady && trustedReconnectReady && !galleryDiscoveryAttempted) {
+    LaunchedEffect(receiverReady, trustedReconnectReady, discoveryRetryToken) {
+        if (!receiverReady && trustedReconnectReady && !galleryDiscoveryAttempted && !isBusy) {
             galleryDiscoveryAttempted = true
             discoverTrustedPc()
         }
@@ -308,183 +331,129 @@ private fun AbotApp() {
                     .imePadding()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("abot.", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
                     Spacer(Modifier.weight(1f))
-                    Text("LOCAL TRANSFER", color = Color.LightGray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    IconButton(
+                        onClick = {
+                            scanner.launch(
+                                ScanOptions()
+                                    .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                                    .setPrompt("Scan the ABOT QR code on Windows")
+                                    .setBeepEnabled(false)
+                                    .setOrientationLocked(true),
+                            )
+                        },
+                        enabled = !isBusy,
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_qr_scan),
+                            contentDescription = "Scan QR code to pair a PC",
+                            tint = Color.Black,
+                        )
+                    }
                 }
-                Text("Send to Windows", fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
+                Text("Send a photo", fontSize = 38.sp, fontWeight = FontWeight.ExtraBold)
                 Text(
-                    "Pair once, open ABOT Gallery, then grab the photo you are viewing.",
-                    color = Color.LightGray,
+                    "Open it. Grab it. Release it at your PC.",
+                    color = Color(0xFF666666),
                     fontSize = 15.sp,
                     lineHeight = 21.sp,
                 )
-                PairingCard(
-                    pairingLink = pairingLink,
-                    verifiedPairing = verifiedPairing,
-                    pairingTrusted = pairingTrusted,
-                    showManualLink = showManualLink,
-                    isDiscovering = isDiscovering,
-                    trustedReconnectReady = trustedReconnectReady,
-                    isBusy = isBusy,
-                    onDiscover = {
-                        discoverTrustedPc("Trusted Windows receiver found. Open ABOT Gallery or choose a file.")
-                    },
-                    onScan = {
-                        scanner.launch(
-                            ScanOptions()
-                                .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                                .setPrompt("Scan the ABOT QR code on Windows")
-                                .setBeepEnabled(false)
-                                .setOrientationLocked(true),
-                        )
-                    },
-                    onToggleManual = { showManualLink = !showManualLink },
-                    onLinkChange = {
-                        pairingLink = it
-                        verifiedPairingLink = null
-                        pairingTrusted = false
-                    },
-                    onVerifyLink = ::verifyPairingLink,
-                    onTrust = { pairing ->
-                        try {
-                            trustedDevices.trust(pairing)
-                            pairingTrusted = true
-                            statusMessage = "Windows identity trusted on this phone."
-                        } catch (error: IllegalArgumentException) {
-                            transferState = TransferState.FAILED
-                            statusMessage = error.message ?: "This identity could not be trusted."
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            color = if (receiverReady) Color.Black else Color(0xFFBDBDBD),
+                            shape = RoundedCornerShape(999.dp),
+                            modifier = Modifier.padding(end = 12.dp),
+                        ) { Text(" ", fontSize = 8.sp, modifier = Modifier.padding(4.dp)) }
+                        Column {
+                            Text(
+                                when {
+                                    receiverReady -> "PC connected"
+                                    isDiscovering -> "Finding trusted PC..."
+                                    trustedReconnectReady -> "Waiting for PC"
+                                    else -> "Not paired"
+                                },
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(statusMessage, color = Color(0xFF666666), fontSize = 12.sp)
                         }
-                    },
-                    onTrustLegacyOnce = {
-                        pairingTrusted = true
-                        statusMessage = "Legacy link approved for this transfer only."
-                    },
-                    onRevoke = { pairing ->
-                        trustedDevices.revoke(pairing.deviceId)
-                        trustedReconnectReady = trustedDevices.hasProvisionedReconnectCredential()
-                        pairingTrusted = false
-                        statusMessage = "Trust revoked. Confirm the code again before sending."
-                    },
-                )
-                TransferCard(
-                    hasFile = selectedUri != null,
-                    canSend = selectedUri != null && verifiedPairing != null && pairingTrusted && !isBusy,
-                    isBusy = isBusy,
-                    transferState = transferState,
-                    progress = progress,
-                    statusMessage = statusMessage,
-                    onOpenGallery = {
+                    }
+                }
+                verifiedPairing?.takeIf { !pairingTrusted }?.let { pairing ->
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("Confirm this code on Windows", fontWeight = FontWeight.Bold)
+                            Text(pairing.comparisonCode, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 4.sp)
+                            Button(
+                                onClick = {
+                                    trustedDevices.trust(pairing)
+                                    pairingTrusted = true
+                                    statusMessage = "PC trusted. Open the gallery."
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text("Code matches") }
+                        }
+                    }
+                }
+                Button(
+                    onClick = {
                         galleryDiscoveryAttempted = false
+                        discoveryRetryToken += 1
                         galleryRefreshKey += 1
                         galleryOpen = true
                     },
-                    onChooseFile = { picker.launch(arrayOf("*/*")) },
-                    onSend = ::sendFile,
-                    onGesture = { selectedUri?.let(::openGestureFor) },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun PairingCard(
-    pairingLink: String,
-    verifiedPairing: VerifiedPairing?,
-    pairingTrusted: Boolean,
-    showManualLink: Boolean,
-    isDiscovering: Boolean,
-    trustedReconnectReady: Boolean,
-    isBusy: Boolean,
-    onDiscover: () -> Unit,
-    onScan: () -> Unit,
-    onToggleManual: () -> Unit,
-    onLinkChange: (String) -> Unit,
-    onVerifyLink: () -> Unit,
-    onTrust: (VerifiedPairing) -> Unit,
-    onTrustLegacyOnce: () -> Unit,
-    onRevoke: (VerifiedPairing) -> Unit,
-) {
-    Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("1. PAIR WITH WINDOWS", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
-            Button(
-                onClick = onDiscover,
-                enabled = !isBusy && !isDiscovering && trustedReconnectReady,
-                colors = monochromeButtonColors(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(if (isDiscovering) "Looking for trusted PCs..." else "Find trusted PC", fontWeight = FontWeight.Bold)
-            }
-            if (!trustedReconnectReady) {
-                Text(
-                    "To enable this, scan the QR, trust the PC, and finish one accepted file transfer.",
-                    color = Color.LightGray,
-                    fontSize = 13.sp,
-                )
-            }
-            Button(onClick = onScan, enabled = !isBusy, colors = monochromeButtonColors(), modifier = Modifier.fillMaxWidth()) {
-                Text(if (verifiedPairing == null) "Scan QR code" else "Scan a different QR code", fontWeight = FontWeight.Bold)
-            }
-            OutlinedButton(onClick = onToggleManual, enabled = !isBusy, modifier = Modifier.fillMaxWidth()) {
-                Text(if (showManualLink) "Hide manual link" else "Enter link manually")
-            }
-            if (showManualLink) {
-                OutlinedTextField(
-                    value = pairingLink,
-                    onValueChange = onLinkChange,
                     enabled = !isBusy,
-                    label = { Text("Windows pairing link") },
-                    placeholder = { Text("abot://pair?...") },
-                    maxLines = 3,
                     modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedButton(
-                    onClick = onVerifyLink,
-                    enabled = pairingLink.isNotBlank() && !isBusy,
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Verify link", fontWeight = FontWeight.Bold) }
-            }
-            verifiedPairing?.let { pairing ->
-                Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(pairing.displayName, fontWeight = FontWeight.Bold)
-                        if (pairing.isLegacy) {
-                            Text("Compatibility mode: receiver identity is not verified.", fontSize = 13.sp)
-                        } else {
-                            Text(pairing.comparisonCode, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 4.sp)
-                            Text("Confirm this code matches Windows.", color = Color.LightGray, fontSize = 13.sp)
-                        }
-                        when {
-                            pairingTrusted && !pairing.isLegacy -> {
-                                Text("Trusted receiver identity", fontWeight = FontWeight.Bold)
-                                OutlinedButton(
-                                    onClick = { onRevoke(pairing) },
-                                    enabled = !isBusy,
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) { Text("Revoke trust") }
-                            }
-                            !pairing.isLegacy -> {
-                                Button(
-                                    onClick = { onTrust(pairing) },
-                                    enabled = !isBusy,
-                                    colors = monochromeButtonColors(),
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) { Text("Code matches - trust this PC", fontWeight = FontWeight.Bold) }
-                            }
-                            !pairingTrusted -> {
-                                Button(
-                                    onClick = onTrustLegacyOnce,
-                                    enabled = !isBusy,
-                                    colors = monochromeButtonColors(),
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) { Text("Use legacy link once", fontWeight = FontWeight.Bold) }
-                            }
-                        }
+                ) { Text("Open ABOT Gallery", fontWeight = FontWeight.Bold) }
+                if (transferState == TransferState.TRANSFERRING || transferState == TransferState.VERIFYING) {
+                    LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+                }
+                Text(statusMessage, color = Color(0xFF555555), fontSize = 13.sp, lineHeight = 19.sp)
+                TextButton(onClick = { showAdvanced = !showAdvanced }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+                    Text(if (showAdvanced) "Hide options" else "More options")
+                }
+                if (showAdvanced) {
+                    OutlinedButton(
+                        onClick = {
+                            galleryDiscoveryAttempted = false
+                            discoveryRetryToken += 1
+                        },
+                        enabled = trustedReconnectReady && !isDiscovering && !isBusy,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Reconnect trusted PC") }
+                    OutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }, enabled = !isBusy, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (selectedUri == null) "Choose another file type" else "Change selected file")
+                    }
+                    if (selectedUri != null) {
+                        Button(
+                            onClick = { selectedUri?.let(::openGestureFor) },
+                            enabled = receiverReady && !isBusy,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("Grab selected file") }
+                    }
+                    TextButton(onClick = { showManualLink = !showManualLink }, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (showManualLink) "Hide manual pairing" else "Manual pairing")
+                    }
+                    if (showManualLink) {
+                        OutlinedTextField(
+                            value = pairingLink,
+                            onValueChange = { pairingLink = it },
+                            label = { Text("Pairing link") },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedButton(onClick = ::verifyPairingLink, modifier = Modifier.fillMaxWidth()) { Text("Verify link") }
                     }
                 }
             }
@@ -493,54 +462,11 @@ private fun PairingCard(
 }
 
 @Composable
-private fun TransferCard(
-    hasFile: Boolean,
-    canSend: Boolean,
-    isBusy: Boolean,
-    transferState: TransferState,
-    progress: Float,
-    statusMessage: String,
-    onOpenGallery: () -> Unit,
-    onChooseFile: () -> Unit,
-    onSend: () -> Unit,
-    onGesture: () -> Unit,
-) {
-    Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("2. OPEN AND GRAB", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
-            Button(onClick = onOpenGallery, enabled = !isBusy, colors = monochromeButtonColors(), modifier = Modifier.fillMaxWidth()) {
-                Text("Open ABOT Gallery", fontWeight = FontWeight.Bold)
-            }
-            Text(
-                "Open a photo and the gesture camera starts automatically. No separate Select or Gesture button.",
-                color = Color.LightGray,
-                fontSize = 13.sp,
-            )
-            Text("FILE PICKER FALLBACK", color = Color.LightGray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            Text(if (hasFile) "File ready to offer" else "No file selected", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            OutlinedButton(onClick = onChooseFile, enabled = !isBusy, modifier = Modifier.fillMaxWidth()) {
-                Text(if (hasFile) "Change file" else "Select file", fontWeight = FontWeight.Bold)
-            }
-            Button(onClick = onSend, enabled = canSend, colors = monochromeButtonColors(), modifier = Modifier.fillMaxWidth()) {
-                Text("Offer file to Windows", fontWeight = FontWeight.Bold)
-            }
-            OutlinedButton(onClick = onGesture, enabled = canSend, modifier = Modifier.fillMaxWidth()) {
-                Text("Grab with hand gesture")
-            }
-            if (transferState == TransferState.TRANSFERRING || transferState == TransferState.VERIFYING) {
-                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
-            }
-            Text(statusMessage, color = Color.White, fontSize = 13.sp, lineHeight = 19.sp)
-        }
-    }
-}
-
-@Composable
 internal fun monochromeButtonColors() = ButtonDefaults.buttonColors(
-    containerColor = Color.White,
-    contentColor = Color.Black,
-    disabledContainerColor = Color.DarkGray,
-    disabledContentColor = Color.LightGray,
+    containerColor = Color.Black,
+    contentColor = Color.White,
+    disabledContainerColor = Color(0xFFE0E0E0),
+    disabledContentColor = Color(0xFF888888),
 )
 
 private fun formatBytes(bytes: Long): String {

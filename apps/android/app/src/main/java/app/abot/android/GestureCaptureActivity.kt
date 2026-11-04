@@ -58,7 +58,7 @@ class GestureCaptureActivity : ComponentActivity() {
         previewView = PreviewView(this)
         val mediaUri = intent.getStringExtra(EXTRA_MEDIA_URI)?.let(Uri::parse)
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme(primary = Color.White, onPrimary = Color.Black)) {
+            MaterialTheme(colorScheme = lightColorScheme(primary = Color.Black, onPrimary = Color.White)) {
                 Surface(Modifier.fillMaxSize()) {
                     Column(Modifier.systemBarsPadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         Text("Grab this photo", style = MaterialTheme.typography.headlineMedium)

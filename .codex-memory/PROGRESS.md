@@ -2,6 +2,7 @@
 
 ## Implemented
 
+- Windows-to-Android trusted transfer first slice: a Windows-selected file is armed by the local fist-to-palm gesture or fallback action; Android polls through the existing trusted reconnect session, requires explicit phone acceptance before bytes, streams encrypted chunks to an app-private temporary file, verifies size and SHA-256, and publishes the verified result to `Downloads/ABOT` through MediaStore pending finalization. Windows waits for the authenticated Android completion and shows a toast.
 - Minimal automatic receive lifecycle: Android automatically rediscovers its provisioned trusted PC after transfers and does not require another QR scan. Windows automatically re-arms its Downloads receiver after completion or rejection, hides new-device QR details by default, removes the receive-another-file action, and reports successful saves with a transient toast. Android and Windows primary screens now use a reduced white-first layout; Android scanning is a top-right icon action.
 - Gesture reliability/feedback repair: Android and Windows now tolerate up to three seconds between slow inference frames, accept stable supported poses at 55% confidence after 350 ms, and retain the single-hand/ordered/one-shot safety gates. Android shows live hand/pose confidence, uses a larger framing preview and haptic stage confirmation, then shows explicit grabbed, offer-reached-Windows, and failure messages. Windows shows live fist confidence and a clear camera-ready/locked state.
 - ABOT Gallery fast path: user-granted MediaStore photo grid, automatic trusted-PC discovery on gallery entry, current-photo preview with an automatically started local palm-to-fist recognizer, and the existing encrypted offer pipeline. Windows starts its Downloads receiver on app launch and starts the offer-bound fist-to-palm acceptance camera when a trusted offer appears. The conventional picker/button path remains available.
@@ -25,6 +26,7 @@
 
 ## Verified
 
+- Reverse-direction component validation: strict Rust workspace Clippy and all 18 Rust tests passed; four Windows gesture tests, TypeScript typecheck, and production UI build passed; Android unit/APK/lint passed. The updated APK installed on the authorized API 35 device. A physical Windows-to-Android transfer is not yet verified.
 - Automatic receive/minimal UI update: Windows gesture tests, TypeScript typecheck, and production build passed; Android unit tests, debug APK assembly, and lint passed. The APK installed successfully on the authorized API 35 phone, and a device screenshot confirmed the white home screen and top-right QR action. The user confirmed the Android-to-Windows gesture flow works on their phone and laptop before this lifecycle/UI refinement.
 - Gesture reliability repair: Android unit tests (including slow-frame sequencing), debug APK assembly, and lint passed; Windows four-test gesture suite, TypeScript typecheck, and production build passed. The repaired APK (SHA-256 `5BCFD17A724347758EE902C6D320E55BF8A91268B721E90084AF247D30886CAC`) installed successfully on the authorized API 35 phone, and the rebuilt Tauri development executable launched. Physical hand recognition and cross-device completion remain unverified.
 - On 2026-11-05, Android unit tests, debug APK assembly, and lint passed; Windows gesture tests, TypeScript typecheck, and production UI build passed. The final APK was installed with `adb install -r` on an authorized API 35 Infinix X6880, preserving app data. Real-device screenshots verified the updated home screen, permission-aware ABOT Gallery, trusted-PC discovery status, safe insets, and MediaStore thumbnail grid. No hand-camera or cross-device transfer was performed in this validation.
@@ -52,7 +54,7 @@
 
 ## Pending
 
-- Run the complete ABOT Gallery gesture path on hardware: keep Windows ABOT open or minimized, open a phone photo, palm-to-fist offer, fist-to-palm accept at the PC, then record matching file hashes. Windows-to-Android transfer and true close-to-tray/background receiver lifecycle are not implemented.
+- Run and record the complete reverse hardware path: choose a Windows file, fist-to-palm release, accept on Android, confirm `Downloads/ABOT`, and compare hashes. Android reverse polling currently requires the app process to remain active; a foreground-service/background receiver and true Windows close-to-tray lifecycle are not implemented.
 - Real-camera hardware validation of the Downloads/gesture slice; see `docs/testing/gestures.md`.
 
 - Record hashes/environment details for the user-reported successful transfer and reconnect. Windows-to-Android transfer, Android asymmetric identity, replay cache, multi-file/cancellation/resume, gesture hardware acceptance, and signed release artifacts remain pending.

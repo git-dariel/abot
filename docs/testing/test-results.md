@@ -1,5 +1,13 @@
 # Test Results
 
+## Minimal lifecycle and bidirectional transfer slice - 2026-11-05
+
+- Automatic receive lifecycle and white-first UI: Android trusted discovery retries without another QR scan; Windows re-arms after completed/rejected receives, hides pairing details until requested, and uses a completion toast. Android places QR scanning in the top-right icon action.
+- Reverse direction: Windows selection is gesture-armed, Android authenticates through trusted reconnect, the phone must explicitly accept before bytes, and accepted encrypted chunks are written to a private temporary file, size/SHA-256 verified, then published to `Downloads/ABOT` using MediaStore pending finalization. Android returns an authenticated verified-completion frame.
+- Passed: `cargo clippy --workspace --all-targets --all-features -- -D warnings`; `cargo test --workspace` (18 tests); four Windows gesture tests; TypeScript typecheck; Windows production UI build; Android unit tests, debug APK assembly, and lint.
+- Device check: `adb install -r` succeeded on the authorized API 35 phone. The earlier automatic-receive APK screen rendered correctly; the final reverse APK installation succeeded.
+- Not yet run: a physical Windows-to-Android file transfer, matching cross-device hashes, Windows camera gesture on the final reverse build, or Android background-process receiving. Computer Use native Windows capture was unavailable because its native pipe was absent.
+
 ## Gesture recognition reliability repair - 2026-11-05
 
 - Phone log history showed `GestureCaptureActivity` remaining active for approximately 38 seconds without a crash; no application-level recognition telemetry existed. This supported a recognition/gating diagnosis rather than an Activity or CameraX crash diagnosis.

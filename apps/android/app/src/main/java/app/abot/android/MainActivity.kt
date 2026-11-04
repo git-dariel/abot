@@ -60,6 +60,8 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 
 private val AbotColorScheme = lightColorScheme(
     primary = Color.Black,
@@ -113,6 +115,10 @@ private fun AbotApp() {
         mutableStateOf(if (trustedReconnectReady) "Finding your trusted PC..." else "Scan once to pair this phone.")
     }
     var progress by remember { mutableFloatStateOf(0f) }
+    var reverseOffer by remember { mutableStateOf<ReverseOffer?>(null) }
+    var reverseDecision by remember { mutableStateOf<CompletableFuture<Boolean>?>(null) }
+    var reversePolling by remember { mutableStateOf(false) }
+    var reverseRetryToken by remember { mutableStateOf(0) }
     val isBusy = transferState in setOf(
         TransferState.TRANSFER_OFFERED,
         TransferState.AWAITING_REMOTE_CONFIRMATION,
@@ -283,6 +289,67 @@ private fun AbotApp() {
         }.start()
     }
 
+    fun pollForWindowsFile(pairing: VerifiedPairing) {
+        if (reversePolling || reverseOffer != null || isBusy) return
+        reversePolling = true
+        Thread {
+            try {
+                val received = ReverseTransferClient.poll(
+                    resolver = context.contentResolver,
+                    cacheDirectory = context.cacheDir,
+                    pairing = pairing,
+                    decide = { offer ->
+                        val decision = CompletableFuture<Boolean>()
+                        mainHandler.post {
+                            reverseOffer = offer
+                            reverseDecision = decision
+                            statusMessage = "${offer.name} is ready from Windows. Review and receive it on this phone."
+                        }
+                        decision.get(10, TimeUnit.MINUTES)
+                    },
+                    onProgress = { receivedBytes, total ->
+                        updateState(
+                            TransferState.TRANSFERRING,
+                            "Receiving ${formatBytes(receivedBytes)} of ${formatBytes(total)} from Windows...",
+                            if (total == 0L) 1f else (receivedBytes.toDouble() / total).toFloat(),
+                        )
+                    },
+                )
+                mainHandler.post {
+                    reverseOffer = null
+                    reverseDecision = null
+                    if (received != null) {
+                        transferState = TransferState.COMPLETED
+                        progress = 1f
+                        statusMessage = "$received was verified and saved to Downloads/ABOT."
+                        Toast.makeText(context, "$received received from Windows.", Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    reverseOffer = null
+                    reverseDecision = null
+                    val detail = error.message ?: "Laptop-to-phone transfer failed"
+                    statusMessage = detail
+                    if (detail.contains("Connection refused", ignoreCase = true)) {
+                        verifiedPairingLink = null
+                        pairingTrusted = false
+                        galleryDiscoveryAttempted = false
+                        discoveryRetryToken += 1
+                    } else {
+                        Toast.makeText(context, detail, Toast.LENGTH_LONG).show()
+                    }
+                }
+            } finally {
+                mainHandler.postDelayed({
+                    reversePolling = false
+                    if (transferState == TransferState.COMPLETED) transferState = TransferState.IDLE
+                    reverseRetryToken += 1
+                }, 3_000)
+            }
+        }.start()
+    }
+
     val gestureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             Toast.makeText(context, "Photo grabbed. Preparing the Windows offer...", Toast.LENGTH_SHORT).show()
@@ -307,6 +374,12 @@ private fun AbotApp() {
         if (!receiverReady && trustedReconnectReady && !galleryDiscoveryAttempted && !isBusy) {
             galleryDiscoveryAttempted = true
             discoverTrustedPc()
+        }
+    }
+    LaunchedEffect(receiverReady, reverseRetryToken) {
+        val pairing = verifiedPairing
+        if (receiverReady && pairing?.reconnectProofHex != null && reverseOffer == null && !isBusy) {
+            pollForWindowsFile(pairing)
         }
     }
 
@@ -404,6 +477,33 @@ private fun AbotApp() {
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                             ) { Text("Code matches") }
+                        }
+                    }
+                }
+                reverseOffer?.let { offer ->
+                    Surface(
+                        color = Color(0xFFF4F4F4),
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("Incoming from Windows", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                            Text(offer.name, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                            Text(formatBytes(offer.size), color = Color(0xFF666666))
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Button(
+                                    onClick = {
+                                        transferState = TransferState.ACCEPTED
+                                        statusMessage = "Accepted. Receiving encrypted file..."
+                                        reverseDecision?.complete(true)
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                ) { Text("Receive") }
+                                OutlinedButton(
+                                    onClick = { reverseDecision?.complete(false) },
+                                    modifier = Modifier.weight(1f),
+                                ) { Text("Decline") }
+                            }
                         }
                     }
                 }

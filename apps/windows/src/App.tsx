@@ -25,6 +25,18 @@ type ReceiverSnapshot = {
   error?: string;
 };
 
+type SelectedFile = {
+  id: string;
+  name: string;
+  size: number;
+  sha256: string;
+};
+
+type OutgoingSnapshot = {
+  state: "idle" | "armed" | "completed";
+  fileName?: string;
+};
+
 const formatBytes = (bytes: number) => {
   if (bytes === 0) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -39,6 +51,8 @@ export function App() {
   const [isStartingReceiver, setIsStartingReceiver] = useState(false);
   const [showPairing, setShowPairing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [outgoing, setOutgoing] = useState<SelectedFile | null>(null);
+  const [outgoingArmed, setOutgoingArmed] = useState(false);
   const nativeShell = isTauri();
 
   useEffect(() => {
@@ -87,6 +101,19 @@ export function App() {
     return () => window.clearTimeout(hide);
   }, [toast]);
 
+  useEffect(() => {
+    if (!nativeShell || !outgoingArmed) return;
+    const timer = window.setInterval(() => {
+      void invoke<OutgoingSnapshot>("outgoing_status").then(status => {
+        if (status.state !== "completed") return;
+        setToast(`${status.fileName ?? outgoing?.name ?? "File"} was received and verified on Android.`);
+        setOutgoing(null);
+        setOutgoingArmed(false);
+      });
+    }, 750);
+    return () => window.clearInterval(timer);
+  }, [nativeShell, outgoingArmed, outgoing?.name]);
+
   const decideTransfer = async (accepted: boolean, transferId = receiver.offer?.transferId) => {
     setReceiverError(null);
     try {
@@ -102,6 +129,29 @@ export function App() {
       setReceiver(await invoke<ReceiverSnapshot>("approve_pairing"));
     } catch (reason) {
       setReceiverError(typeof reason === "string" ? reason : "The pairing approval could not be applied");
+    }
+  };
+
+  const chooseOutgoing = async () => {
+    setReceiverError(null);
+    try {
+      const selected = await invoke<SelectedFile[]>("select_files");
+      setOutgoing(selected[0] ?? null);
+      setOutgoingArmed(false);
+    } catch (reason) {
+      setReceiverError(typeof reason === "string" ? reason : "The file could not be selected");
+    }
+  };
+
+  const armOutgoing = async () => {
+    if (!outgoing) return;
+    setReceiverError(null);
+    try {
+      await invoke("arm_outgoing_file", { fileId: outgoing.id });
+      setOutgoingArmed(true);
+      setToast(`${outgoing.name} is ready for your trusted phone.`);
+    } catch (reason) {
+      setReceiverError(typeof reason === "string" ? reason : "The file could not be armed");
     }
   };
 
@@ -175,6 +225,41 @@ export function App() {
           )}
           {!nativeShell && <p className="notice">Open this page in the native Windows app.</p>}
           {receiverError && <p className="inline-error" role="alert">{receiverError}</p>}
+        </div>
+      </section>
+      <section className="send-section" aria-labelledby="send-heading">
+        <p className="eyebrow">SEND TO PHONE</p>
+        <div className="send-card">
+          {!outgoing && (
+            <>
+              <strong id="send-heading">Send from this laptop</strong>
+              <p className="muted">Choose one file, then use the local hand gesture to release it to your trusted phone.</p>
+              <button type="button" className="secondary compact" onClick={() => void chooseOutgoing()}>Choose file</button>
+            </>
+          )}
+          {outgoing && !outgoingArmed && (
+            <>
+              <strong id="send-heading">{outgoing.name}</strong>
+              <small>{formatBytes(outgoing.size)}</small>
+              <GestureAccept
+                key={outgoing.id}
+                onAccept={() => void armOutgoing()}
+                intro="File ready. Show a fist, then open your palm to release it to your phone."
+                armed="FIST LOCKED - open your palm to send this file."
+                action="send this file"
+              />
+              <button type="button" onClick={() => void armOutgoing()}>Send without gesture</button>
+              <button type="button" className="secondary" onClick={() => void chooseOutgoing()}>Choose a different file</button>
+            </>
+          )}
+          {outgoing && outgoingArmed && (
+            <>
+              <div className="ready-mark" aria-hidden="true">✓</div>
+              <strong id="send-heading">Ready for phone</strong>
+              <p className="muted">Keep ABOT open on Android and accept {outgoing.name} when it appears.</p>
+              <button type="button" className="secondary compact" onClick={() => void chooseOutgoing()}>Change file</button>
+            </>
+          )}
         </div>
       </section>
       {toast && <div className="toast" role="status">✓ {toast}</div>}

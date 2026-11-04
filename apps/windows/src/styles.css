@@ -19,6 +19,10 @@ header { display: flex; min-height: 76px; align-items: center; justify-content: 
 h1 { margin: 0; font-size: clamp(48px, 9vw, 76px); line-height: .96; letter-spacing: -.065em; }
 .lede { max-width: 530px; margin: 24px 0 0; color: #666; font-size: 17px; line-height: 1.55; }
 .receiver { border-top: 1px solid #e8e8e8; padding-top: 32px; }
+.send-section { margin-top: 32px; padding-top: 32px; border-top: 1px solid #e8e8e8; }
+.send-card { min-height: 220px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; border: 1px solid #ddd; border-radius: 24px; text-align: center; }
+.send-card strong { display: block; max-width: 100%; overflow-wrap: anywhere; font-size: 24px; letter-spacing: -.03em; }
+.send-card > button + button { margin-top: 10px; }
 .receiver-card { min-height: 250px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; border: 1px solid #ddd; border-radius: 24px; text-align: center; }
 .receiver-card strong { display: block; font-size: 25px; letter-spacing: -.035em; }
 .muted, small { color: #6d6d6d; }

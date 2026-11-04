@@ -2,9 +2,21 @@ import { useEffect, useRef, useState } from "react";
 import { FilesetResolver, GestureRecognizer } from "@mediapipe/tasks-vision";
 import { GestureSequence } from "./gesture-sequence.mjs";
 
-export function GestureAccept({ onAccept }: { onAccept: () => void }) {
+type GestureAcceptProps = {
+  onAccept: () => void;
+  intro?: string;
+  armed?: string;
+  action?: string;
+};
+
+export function GestureAccept({
+  onAccept,
+  intro = "Trusted incoming offer received. Starting the camera: show a fist, then open your palm to accept.",
+  armed = "FIST LOCKED - open your palm to accept this file.",
+  action = "accept this file",
+}: GestureAcceptProps) {
   const [enabled, setEnabled] = useState(true);
-  const [status, setStatus] = useState("Trusted incoming offer received. Starting the camera: show a fist, then open your palm to accept.");
+  const [status, setStatus] = useState(intro);
   const video = useRef<HTMLVideoElement>(null);
   const accept = useRef(onAccept);
   accept.current = onAccept;
@@ -60,7 +72,7 @@ export function GestureAccept({ onAccept }: { onAccept: () => void }) {
               const confidence = Math.round((gesture?.score ?? 0) * 100);
               setStatus(
                 sequence.armed
-                  ? "FIST LOCKED — open your palm to accept this file."
+                  ? armed
                   : gesture?.categoryName === "Closed_Fist"
                     ? `Fist found (${confidence}%). Hold it steady.`
                     : result.landmarks.length
@@ -86,7 +98,7 @@ export function GestureAccept({ onAccept }: { onAccept: () => void }) {
       disposed = true;
       stop();
       setEnabled(false);
-      setStatus("Camera or gesture model unavailable. Check camera permission or use Accept and receive.");
+      setStatus(`Camera or gesture model unavailable. Check camera permission or use the button to ${action}.`);
     };
     void run();
     return () => {
@@ -95,7 +107,7 @@ export function GestureAccept({ onAccept }: { onAccept: () => void }) {
       window.removeEventListener("blur", leave);
       stop();
     };
-  }, [enabled]);
+  }, [enabled, action, armed]);
 
   return <div className="gesture-panel">
     <p>{status}</p>

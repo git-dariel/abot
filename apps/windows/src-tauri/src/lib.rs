@@ -13,7 +13,8 @@ use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::collections::HashMap;
 use std::io::{self, Read, Write};
-use std::net::{IpAddr, SocketAddr, TcpListener};
+use std::fs::File;
+use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
@@ -24,10 +25,12 @@ use uuid::Uuid;
 
 const QR_MAGIC: &[u8; 4] = b"ABR1";
 const RECONNECT_MAGIC: &[u8; 4] = b"ABR2";
+const REVERSE_MAGIC: &[u8; 4] = b"ABR3";
 // These v1 wire domains intentionally retain their pre-ABOT bytes for compatibility.
 const OFFER_AAD: &[u8] = b"AIRBRIDGE-OFFER-V1";
 const DECISION_AAD: &[u8] = b"AIRBRIDGE-DECISION-V1";
 const COMPLETE_AAD: &[u8] = b"AIRBRIDGE-COMPLETE-V1";
+const REVERSE_OFFER_AAD: &[u8] = b"AIRBRIDGE-REVERSE-OFFER-V1";
 const MAX_CONTROL_FRAME: usize = 16 * 1024;
 const MAX_DATA_FRAME: usize = 64 * 1024 + 16;
 const MAX_FILE_SIZE: u64 = 20 * 1024 * 1024 * 1024;
@@ -40,7 +43,14 @@ const DISCOVERY_CHUNK_BYTES: usize = 180;
 const MAX_RECONNECT_HELLO: usize = 4 * 1024;
 
 #[derive(Default)]
-struct SelectedFiles(Mutex<HashMap<Uuid, PathBuf>>);
+struct SelectedFiles(Arc<Mutex<SelectedFilesInner>>);
+
+#[derive(Default)]
+struct SelectedFilesInner {
+    paths: HashMap<Uuid, PathBuf>,
+    armed: Option<Uuid>,
+    completed: Option<String>,
+}
 
 #[derive(Default)]
 struct ReceiverState(Arc<SharedReceiver>);
@@ -112,6 +122,25 @@ struct SelectedFileMetadata {
     sha256: String,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReverseOffer {
+    available: bool,
+    transfer_id: Option<Uuid>,
+    file_id: Option<Uuid>,
+    name: Option<String>,
+    size: Option<u64>,
+    sha256: Option<String>,
+    receiver_device_id: Option<Uuid>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OutgoingSnapshot {
+    state: &'static str,
+    file_name: Option<String>,
+}
+
 #[tauri::command]
 fn protocol_status() -> &'static str {
     "encrypted-single-file-receiver"
@@ -135,17 +164,53 @@ fn select_files(
         .collect::<Result<Vec<_>, _>>()?;
     let (prepared, updated_selection) = prepare_selected_paths(paths)?;
 
-    *selected_files
+    let mut selection = selected_files
         .0
         .lock()
-        .map_err(|_| "Selected-file state is unavailable".to_owned())? = updated_selection;
+        .map_err(|_| "Selected-file state is unavailable".to_owned())?;
+    selection.paths = updated_selection;
+    selection.armed = None;
+    selection.completed = None;
     Ok(prepared)
+}
+
+#[tauri::command]
+fn arm_outgoing_file(
+    file_id: Uuid,
+    selected_files: State<'_, SelectedFiles>,
+) -> Result<(), String> {
+    let mut selection = selected_files
+        .0
+        .lock()
+        .map_err(|_| "Selected-file state is unavailable".to_owned())?;
+    if !selection.paths.contains_key(&file_id) {
+        return Err("Select the file again before sending".to_owned());
+    }
+    selection.armed = Some(file_id);
+    selection.completed = None;
+    Ok(())
+}
+
+#[tauri::command]
+fn outgoing_status(selected_files: State<'_, SelectedFiles>) -> Result<OutgoingSnapshot, String> {
+    let selection = selected_files
+        .0
+        .lock()
+        .map_err(|_| "Selected-file state is unavailable".to_owned())?;
+    Ok(if let Some(name) = selection.completed.clone() {
+        OutgoingSnapshot { state: "completed", file_name: Some(name) }
+    } else if selection.armed.is_some() {
+        OutgoingSnapshot { state: "armed", file_name: None }
+    } else {
+        OutgoingSnapshot { state: "idle", file_name: None }
+    })
 }
 
 #[tauri::command]
 fn start_receiver(
     app: AppHandle,
     receiver: State<'_, ReceiverState>,
+    selected_files: State<'_, SelectedFiles>,
 ) -> Result<ReceiverSnapshot, String> {
     {
         let inner = receiver
@@ -249,9 +314,10 @@ fn start_receiver(
     set_receiver_snapshot(&receiver.0, snapshot.clone(), None)?;
 
     let shared = Arc::clone(&receiver.0);
+    let outgoing = Arc::clone(&selected_files.0);
     std::thread::spawn(move || {
         let _advertisement = advertisement;
-        if let Err(error) = receive_once(
+        if let Err(error) = receive_loop(
             listener,
             destination,
             secret,
@@ -259,6 +325,7 @@ fn start_receiver(
             hex::encode(identity_key),
             expires_at_unix_ms,
             &shared,
+            &outgoing,
         ) {
             let prior = snapshot_without_secret(&shared);
             let _ = set_receiver_snapshot(
@@ -339,6 +406,50 @@ fn private_local_ipv4() -> Option<std::net::Ipv4Addr> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn receive_loop(
+    listener: TcpListener,
+    destination: PathBuf,
+    secret: [u8; SESSION_KEY_BYTES],
+    discovery_challenge: [u8; SESSION_KEY_BYTES],
+    expected_receiver_identity_key: String,
+    expires_at_unix_ms: u64,
+    shared: &Arc<SharedReceiver>,
+    outgoing: &Arc<Mutex<SelectedFilesInner>>,
+) -> Result<(), String> {
+    loop {
+        let (mut stream, peer) = listener
+            .accept()
+            .map_err(|_| "The local receiver stopped unexpectedly".to_owned())?;
+        let mut magic = [0_u8; 4];
+        stream
+            .read_exact(&mut magic)
+            .map_err(|_| "The peer did not provide a valid request".to_owned())?;
+        if &magic == REVERSE_MAGIC {
+            handle_reverse_request(
+                stream,
+                peer,
+                discovery_challenge,
+                &expected_receiver_identity_key,
+                outgoing,
+            )?;
+            continue;
+        }
+        return receive_upload(
+            stream,
+            peer,
+            magic,
+            destination,
+            secret,
+            discovery_challenge,
+            expected_receiver_identity_key,
+            expires_at_unix_ms,
+            shared,
+        );
+    }
+}
+
+#[cfg(test)]
 fn receive_once(
     listener: TcpListener,
     destination: PathBuf,
@@ -348,9 +459,30 @@ fn receive_once(
     expires_at_unix_ms: u64,
     shared: &Arc<SharedReceiver>,
 ) -> Result<(), String> {
-    let (mut stream, peer) = listener
-        .accept()
-        .map_err(|_| "The local receiver stopped unexpectedly".to_owned())?;
+    receive_loop(
+        listener,
+        destination,
+        secret,
+        discovery_challenge,
+        expected_receiver_identity_key,
+        expires_at_unix_ms,
+        shared,
+        &Arc::new(Mutex::new(SelectedFilesInner::default())),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn receive_upload(
+    mut stream: TcpStream,
+    peer: SocketAddr,
+    magic: [u8; 4],
+    destination: PathBuf,
+    secret: [u8; SESSION_KEY_BYTES],
+    discovery_challenge: [u8; SESSION_KEY_BYTES],
+    expected_receiver_identity_key: String,
+    expires_at_unix_ms: u64,
+    shared: &Arc<SharedReceiver>,
+) -> Result<(), String> {
     if !is_local_peer(peer) {
         return Err("A connection from outside the local network was rejected".to_owned());
     }
@@ -364,10 +496,6 @@ fn receive_once(
         .set_write_timeout(Some(Duration::from_secs(30)))
         .map_err(|_| "Could not configure the incoming connection".to_owned())?;
 
-    let mut magic = [0_u8; 4];
-    stream
-        .read_exact(&mut magic)
-        .map_err(|_| "The sender did not provide a valid offer".to_owned())?;
     let (session_key, authenticated_sender) = match &magic {
         value if value == QR_MAGIC => (secret, None),
         value if value == RECONNECT_MAGIC => {
@@ -490,6 +618,122 @@ fn receive_once(
                 Some("The file was saved, but the sender did not receive confirmation".to_owned());
         }
     }
+    Ok(())
+}
+
+fn handle_reverse_request(
+    mut stream: TcpStream,
+    peer: SocketAddr,
+    discovery_challenge: [u8; SESSION_KEY_BYTES],
+    receiver_identity_key: &str,
+    outgoing: &Arc<Mutex<SelectedFilesInner>>,
+) -> Result<(), String> {
+    if !is_local_peer(peer) {
+        return Err("A connection from outside the local network was rejected".to_owned());
+    }
+    stream
+        .set_read_timeout(Some(Duration::from_secs(10 * 60)))
+        .map_err(|_| "Could not configure the reverse transfer".to_owned())?;
+    stream
+        .set_write_timeout(Some(Duration::from_secs(120)))
+        .map_err(|_| "Could not configure the reverse transfer".to_owned())?;
+    let (session_key, android_device_id) = authenticate_reconnect(
+        &mut stream,
+        &discovery_challenge,
+        receiver_identity_key,
+    )?;
+    let selected = {
+        let selection = outgoing
+            .lock()
+            .map_err(|_| "Selected-file state is unavailable".to_owned())?;
+        selection
+            .armed
+            .and_then(|id| selection.paths.get(&id).cloned().map(|path| (id, path)))
+    };
+    let Some((file_id, path)) = selected else {
+        let response = serde_json::to_vec(&ReverseOffer {
+            available: false,
+            transfer_id: None,
+            file_id: None,
+            name: None,
+            size: None,
+            sha256: None,
+            receiver_device_id: None,
+        })
+        .map_err(|_| "Could not create the reverse response".to_owned())?;
+        return write_encrypted_frame(&mut stream, &session_key, REVERSE_OFFER_AAD, &response)
+            .map_err(|_| "Could not send the reverse response".to_owned());
+    };
+    let metadata = path
+        .metadata()
+        .map_err(|_| "The selected file is no longer accessible".to_owned())?;
+    let name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .filter(|value| is_safe_leaf_name(value))
+        .ok_or_else(|| "The selected file name is not portable or safe".to_owned())?
+        .to_owned();
+    let transfer_id = Uuid::new_v4();
+    let digest = sha256_file(&path).map_err(|_| "The selected file could not be read".to_owned())?;
+    let response = serde_json::to_vec(&ReverseOffer {
+        available: true,
+        transfer_id: Some(transfer_id),
+        file_id: Some(file_id),
+        name: Some(name.clone()),
+        size: Some(metadata.len()),
+        sha256: Some(hex::encode(digest)),
+        receiver_device_id: Some(android_device_id),
+    })
+    .map_err(|_| "Could not create the reverse offer".to_owned())?;
+    write_encrypted_frame(&mut stream, &session_key, REVERSE_OFFER_AAD, &response)
+        .map_err(|_| "Could not send the reverse offer".to_owned())?;
+    let decision_bytes = read_encrypted_frame(&mut stream, &session_key, DECISION_AAD, MAX_CONTROL_FRAME)
+        .map_err(|_| "Android did not return an authenticated decision".to_owned())?;
+    let decision: TransferDecision = serde_json::from_slice(&decision_bytes)
+        .map_err(|_| "Android returned a malformed decision".to_owned())?;
+    if !decision.accepted {
+        return Ok(());
+    }
+    let mut source = File::open(&path).map_err(|_| "The selected file could not be opened".to_owned())?;
+    let mut buffer = [0_u8; 64 * 1024];
+    let mut sequence = 0_u64;
+    loop {
+        let count = source
+            .read(&mut buffer)
+            .map_err(|_| "The selected file could not be read".to_owned())?;
+        if count == 0 {
+            break;
+        }
+        write_encrypted_frame(
+            &mut stream,
+            &session_key,
+            &data_aad(transfer_id, sequence),
+            &buffer[..count],
+        )
+        .map_err(|_| "The encrypted file stream was interrupted".to_owned())?;
+        sequence = sequence
+            .checked_add(1)
+            .ok_or_else(|| "The transfer sequence overflowed".to_owned())?;
+    }
+    stream
+        .write_all(&0_u32.to_be_bytes())
+        .map_err(|_| "Could not finish the encrypted file stream".to_owned())?;
+    stream.flush().map_err(|_| "Could not finish the encrypted file stream".to_owned())?;
+    let completion = read_encrypted_frame(&mut stream, &session_key, COMPLETE_AAD, MAX_CONTROL_FRAME)
+        .map_err(|_| "Android did not confirm the verified file".to_owned())?;
+    let completion: serde_json::Value = serde_json::from_slice(&completion)
+        .map_err(|_| "Android returned a malformed completion".to_owned())?;
+    if completion.get("verified").and_then(serde_json::Value::as_bool) != Some(true) {
+        return Err("Android could not verify the received file".to_owned());
+    }
+    let mut selection = outgoing
+        .lock()
+        .map_err(|_| "Selected-file state is unavailable".to_owned())?;
+    selection.paths.remove(&file_id);
+    if selection.armed == Some(file_id) {
+        selection.armed = None;
+    }
+    selection.completed = Some(name);
     Ok(())
 }
 
@@ -895,6 +1139,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             protocol_status,
             select_files,
+            arm_outgoing_file,
+            outgoing_status,
             start_receiver,
             receiver_status,
             approve_pairing,

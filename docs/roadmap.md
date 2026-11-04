@@ -50,11 +50,13 @@
 - Device-checked: the final APK was installed on an authorized API 35 phone; the updated home screen, permission-aware gallery, discovery state, insets, and real MediaStore thumbnail grid rendered correctly.
 - User-reported: conventional file transfer and trusted-PC reconnect work on the user's devices.
 - User-verified: Android-to-Windows gallery gesture transfer works on the user's phone and laptop.
-- Pending: Windows minimized-camera behavior, camera permission/lifecycle scenarios, and recorded file hashes/environment details from `docs/testing/gestures.md`. Windows-to-Android transfer and close-to-tray receiver lifecycle remain later milestones. Another vendor's Gallery cannot supply its current photo to ABOT under normal Android application privileges.
+- Implemented reverse-direction first slice: Windows can select one file and arm it with the local fist-to-palm gesture (or an explicit fallback button). A provisioned Android 10+ phone polls the authenticated trusted session, displays the incoming offer, and sends its explicit decision before any file bytes. Accepted bytes are streamed into an app-private temporary file, checked against the declared size and SHA-256, then published through Android's pending MediaStore flow to `Downloads/ABOT`. Windows reports Android's authenticated verified-completion acknowledgement.
+- Tested reverse-direction slice: Rust workspace tests and strict Clippy, Windows gesture tests/typecheck/production build, and Android unit/APK/lint pass. The APK installed successfully on the authorized API 35 phone. Native Windows visual capture was unavailable because the Computer Use native pipe was absent; a real laptop-to-phone transfer and matching hardware hashes are still pending.
+- Pending: physical laptop-to-phone acceptance, Windows minimized-camera behavior, Android background/foreground-service receiving, camera permission/lifecycle scenarios, and recorded file hashes/environment details from `docs/testing/gestures.md`. Another vendor's Gallery cannot supply its current photo to ABOT under normal Android application privileges.
 
 ## Milestones 5–10
 
-Reverse-direction transfer, mutual durable pairing, gestures, polished UI, reliability testing, and signed releases remain pending. The reported manual-link hardware success still needs the test evidence required by the acceptance plan.
+Reverse-direction hardware acceptance, mutual durable pairing, close-to-tray/background lifecycle, reliability testing, and signed releases remain pending. The reported hardware success still needs the test evidence required by the acceptance plan.
 
 ## Branding milestone — ABOT
 

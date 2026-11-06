@@ -17,64 +17,22 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
-
-private val AbotColorScheme = lightColorScheme(
-    primary = Color.Black,
-    onPrimary = Color.White,
-    background = Color.White,
-    onBackground = Color(0xFF111111),
-    surface = Color.White,
-    onSurface = Color(0xFF111111),
-    surfaceVariant = Color(0xFFF4F4F4),
-    onSurfaceVariant = Color(0xFF444444),
-    outline = Color(0xFFBDBDBD),
-    error = Color(0xFF9F1C1C),
-    onError = Color.White,
-)
 
 class MainActivity : ComponentActivity() {
     companion object {
@@ -170,8 +128,9 @@ private fun AbotApp(
     val trustedDevices = remember { TrustedDeviceStore(context) }
     var selectedUri by rememberSaveable { mutableStateOf<Uri?>(null) }
     var galleryOpen by rememberSaveable { mutableStateOf(false) }
-    var galleryRefreshKey by rememberSaveable { mutableStateOf(0) }
-    var showAdvanced by rememberSaveable { mutableStateOf(false) }
+    var galleryRefreshKey by rememberSaveable { mutableIntStateOf(0) }
+    var activeSection by rememberSaveable { mutableStateOf(AbotMobileSection.HOME) }
+    var recentActivity by rememberSaveable { mutableStateOf<String?>(null) }
     var hasPhotoAccess by remember { mutableStateOf(hasGalleryPhotoAccess(context)) }
     var pairingLink by rememberSaveable { mutableStateOf("") }
     var verifiedPairingLink by rememberSaveable { mutableStateOf<String?>(null) }
@@ -332,6 +291,7 @@ private fun AbotApp(
                     "${result.fileName} was received, verified, and saved on Windows.",
                     1f,
                 )
+                mainHandler.post { recentActivity = "Sent ${result.fileName} to Windows" }
                 mainHandler.postDelayed({
                     selectedUri = null
                     transferState = TransferState.IDLE
@@ -458,12 +418,13 @@ private fun AbotApp(
         transferState = TransferState.IDLE
         progress = 1f
         statusMessage = "$name was verified and saved to Downloads/ABOT."
+        recentActivity = "Received $name from Windows"
         onCompletedReceiveConsumed()
     }
 
-    MaterialTheme(colorScheme = AbotColorScheme) {
-        Surface(modifier = Modifier.fillMaxSize()) {
-            if (galleryOpen) {
+    if (galleryOpen) {
+        AbotTheme {
+            Surface(modifier = Modifier.fillMaxSize()) {
                 AbotGalleryScreen(
                     hasPhotoAccess = hasPhotoAccess,
                     receiverReady = receiverReady,
@@ -475,187 +436,73 @@ private fun AbotApp(
                     onRequestAccess = { galleryPermission.launch(galleryPermissions()) },
                     onOpenPhoto = ::openGestureFor,
                 )
-            } else Column(
-                modifier = Modifier
-                    .statusBarsPadding()
-                    .navigationBarsPadding()
-                    .imePadding()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp),
-            ) {
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("abot.", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
-                    Spacer(Modifier.weight(1f))
-                    IconButton(
-                        onClick = {
-                            scanner.launch(
-                                ScanOptions()
-                                    .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                                    .setPrompt("Scan the ABOT QR code on Windows")
-                                    .setBeepEnabled(false)
-                                    .setOrientationLocked(true),
-                            )
-                        },
-                        enabled = !isBusy,
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_qr_scan),
-                            contentDescription = "Scan QR code to pair a PC",
-                            tint = Color.Black,
-                        )
-                    }
-                }
-                Text("Send a photo", fontSize = 38.sp, fontWeight = FontWeight.ExtraBold)
-                Text(
-                    "Open it. Grab it. Release it at your PC.",
-                    color = Color(0xFF666666),
-                    fontSize = 15.sp,
-                    lineHeight = 21.sp,
-                )
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            color = if (receiverReady) Color.Black else Color(0xFFBDBDBD),
-                            shape = RoundedCornerShape(999.dp),
-                            modifier = Modifier.padding(end = 12.dp),
-                        ) { Text(" ", fontSize = 8.sp, modifier = Modifier.padding(4.dp)) }
-                        Column {
-                            Text(
-                                when {
-                                    receiverReady -> "PC connected"
-                                    isDiscovering -> "Finding trusted PC..."
-                                    trustedReconnectReady -> "Waiting for PC"
-                                    else -> "Not paired"
-                                },
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Text(statusMessage, color = Color(0xFF666666), fontSize = 12.sp)
-                        }
-                    }
-                }
-                verifiedPairing?.takeIf { !pairingTrusted }?.let { pairing ->
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text("Confirm this code on Windows", fontWeight = FontWeight.Bold)
-                            Text(pairing.comparisonCode, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 4.sp)
-                            Button(
-                                onClick = {
-                                    trustedDevices.trust(pairing)
-                                    pairingTrusted = true
-                                    statusMessage = "PC trusted. Open the gallery."
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) { Text("Code matches") }
-                        }
-                    }
-                }
-                reverseOffer?.let { offer ->
-                    Surface(
-                        color = Color(0xFFF4F4F4),
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text("Incoming from Windows", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
-                            Text(offer.name, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                            Text(formatBytes(offer.size), color = Color(0xFF666666))
-                            Button(
-                                onClick = {
-                                    receiveGestureLauncher.launch(
-                                        Intent(context, ReceiveGestureActivity::class.java)
-                                            .putExtra(ReceiveGestureActivity.EXTRA_TRANSFER_ID, offer.transferId.toString()),
-                                    )
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) { Text("Open receive camera") }
-                            OutlinedButton(
-                                onClick = {
-                                    TrustedReceiverService.accept(context, offer.transferId.toString())
-                                    reverseOffer = null
-                                    transferState = TransferState.ACCEPTED
-                                    statusMessage = "Accepted. Receiving encrypted file..."
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) { Text("Receive without gesture") }
-                            TextButton(
-                                onClick = {
-                                    TrustedReceiverService.decline(context, offer.transferId.toString())
-                                    reverseOffer = null
-                                    statusMessage = "Windows transfer declined."
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) { Text("Decline") }
-                        }
-                    }
-                }
-                Button(
-                    onClick = {
-                        if (!receiverReady && trustedReconnectReady) reconnectTrustedPc()
-                        galleryRefreshKey += 1
-                        galleryOpen = true
-                    },
-                    enabled = !isBusy,
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Open ABOT Gallery", fontWeight = FontWeight.Bold) }
-                if (transferState == TransferState.TRANSFERRING || transferState == TransferState.VERIFYING) {
-                    LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
-                }
-                Text(statusMessage, color = Color(0xFF555555), fontSize = 13.sp, lineHeight = 19.sp)
-                TextButton(onClick = { showAdvanced = !showAdvanced }, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                    Text(if (showAdvanced) "Hide options" else "More options")
-                }
-                if (showAdvanced) {
-                    OutlinedButton(
-                        onClick = {
-                            reconnectTrustedPc()
-                        },
-                        enabled = trustedReconnectReady && !isDiscovering && !isBusy,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text("Reconnect trusted PC") }
-                    OutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }, enabled = !isBusy, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (selectedUri == null) "Choose another file type" else "Change selected file")
-                    }
-                    if (selectedUri != null) {
-                        Button(
-                            onClick = { selectedUri?.let(::openGestureFor) },
-                            enabled = receiverReady && !isBusy,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) { Text("Grab selected file") }
-                    }
-                    TextButton(onClick = { showManualLink = !showManualLink }, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (showManualLink) "Hide manual pairing" else "Manual pairing")
-                    }
-                    if (showManualLink) {
-                        OutlinedTextField(
-                            value = pairingLink,
-                            onValueChange = { pairingLink = it },
-                            label = { Text("Pairing link") },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        OutlinedButton(onClick = ::verifyPairingLink, modifier = Modifier.fillMaxWidth()) { Text("Verify link") }
-                    }
-                }
             }
         }
+    } else {
+        AbotMainShell(
+            section = activeSection,
+            state = AbotMainUiState(
+                receiverReady = receiverReady,
+                isDiscovering = isDiscovering,
+                isBusy = isBusy,
+                statusMessage = statusMessage,
+                trustedReconnectReady = trustedReconnectReady,
+                transferState = transferState,
+                progress = progress,
+                selectedFile = selectedUri != null,
+                verifiedPairing = verifiedPairing,
+                pairingTrusted = pairingTrusted,
+                reverseOffer = reverseOffer,
+                recentActivity = recentActivity,
+            ),
+            pairingLink = pairingLink,
+            showManualPairing = showManualLink,
+            onSectionChange = { activeSection = it },
+            onScan = {
+                scanner.launch(
+                    ScanOptions()
+                        .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                        .setPrompt("Scan the ABOT QR code on Windows")
+                        .setBeepEnabled(false)
+                        .setOrientationLocked(true),
+                )
+            },
+            onOpenGallery = {
+                if (!receiverReady && trustedReconnectReady) reconnectTrustedPc()
+                galleryRefreshKey += 1
+                galleryOpen = true
+            },
+            onTrustPairing = { pairing ->
+                trustedDevices.trust(pairing)
+                pairingTrusted = true
+                statusMessage = "PC trusted. Open the gallery."
+            },
+            onOpenReceiveGesture = { offer ->
+                receiveGestureLauncher.launch(
+                    Intent(context, ReceiveGestureActivity::class.java)
+                        .putExtra(ReceiveGestureActivity.EXTRA_TRANSFER_ID, offer.transferId.toString()),
+                )
+            },
+            onReceiveWithoutGesture = { offer ->
+                TrustedReceiverService.accept(context, offer.transferId.toString())
+                reverseOffer = null
+                transferState = TransferState.ACCEPTED
+                statusMessage = "Accepted. Receiving encrypted file..."
+            },
+            onDecline = { offer ->
+                TrustedReceiverService.decline(context, offer.transferId.toString())
+                reverseOffer = null
+                statusMessage = "Windows transfer declined."
+            },
+            onChooseFile = { picker.launch(arrayOf("*/*")) },
+            onGrabSelectedFile = { selectedUri?.let(::openGestureFor) },
+            onReconnect = ::reconnectTrustedPc,
+            onToggleManualPairing = { showManualLink = !showManualLink },
+            onPairingLinkChange = { pairingLink = it },
+            onVerifyPairingLink = ::verifyPairingLink,
+        )
     }
 }
-
-@Composable
-internal fun monochromeButtonColors() = ButtonDefaults.buttonColors(
-    containerColor = Color.Black,
-    contentColor = Color.White,
-    disabledContainerColor = Color(0xFFE0E0E0),
-    disabledContentColor = Color(0xFF888888),
-)
 
 private fun formatBytes(bytes: Long): String {
     if (bytes < 1024) return "$bytes B"

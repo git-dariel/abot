@@ -21,7 +21,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -58,16 +57,18 @@ class GestureCaptureActivity : ComponentActivity() {
         previewView = PreviewView(this)
         val mediaUri = intent.getStringExtra(EXTRA_MEDIA_URI)?.let(Uri::parse)
         setContent {
-            MaterialTheme(colorScheme = lightColorScheme(primary = Color.Black, onPrimary = Color.White)) {
-                Surface(Modifier.fillMaxSize()) {
-                    Column(Modifier.systemBarsPadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Text("Grab this photo", style = MaterialTheme.typography.headlineMedium)
-                        Text("Show one open palm, then close it into a fist. Windows must independently confirm with its own fist-to-palm gesture before any file bytes move.")
+            AbotTheme {
+                Surface(Modifier.fillMaxSize(), color = AbotPaper) {
+                    Column(Modifier.systemBarsPadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        AbotSectionLabel("Send gesture")
+                        Text("Grab this photo.", style = MaterialTheme.typography.headlineLarge)
+                        Text("Open palm → closed fist", color = AbotBlue, style = MaterialTheme.typography.titleLarge)
+                        Text("The gesture prepares an offer. Windows still confirms before any bytes move.", color = AbotMuted, style = MaterialTheme.typography.bodySmall)
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f)
-                                .background(Color(0xFF111111)),
+                                .background(AbotInk),
                             contentAlignment = Alignment.Center,
                         ) {
                             if (mediaUri != null) {
@@ -80,15 +81,24 @@ class GestureCaptureActivity : ComponentActivity() {
                                 )
                             }
                             Surface(
-                                modifier = Modifier.align(Alignment.BottomEnd).size(width = 180.dp, height = 240.dp),
-                                color = Color.Black,
+                                modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp).size(width = 150.dp, height = 200.dp),
+                                color = AbotInk,
+                                border = androidx.compose.foundation.BorderStroke(2.dp, AbotBlue),
                             ) {
                                 AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
                             }
                         }
-                        Text(message)
-                        Text("Camera frames stay on this phone.", style = MaterialTheme.typography.bodySmall)
-                        Button(onClick = { finish() }, modifier = Modifier.fillMaxWidth()) { Text("Cancel gesture") }
+                        Surface(color = AbotSoft, modifier = Modifier.fillMaxWidth()) {
+                            Text(message, Modifier.padding(14.dp), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                        }
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text("Camera stays on this phone", style = MaterialTheme.typography.bodySmall, color = AbotMuted, modifier = Modifier.weight(1f))
+                            OutlinedButton(
+                                onClick = { finish() },
+                                border = androidx.compose.foundation.BorderStroke(1.dp, AbotInk),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp),
+                            ) { Text("Cancel") }
+                        }
                     }
                 }
             }

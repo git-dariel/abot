@@ -81,3 +81,10 @@ Generated debug artifacts:
 - ABOT Windows executable: `target/debug/abot-windows.exe` (13,584,384 bytes), SHA-256 `7404CF3D74D375ECFFC9D184264CCF7ED07D5D5A318BDFF23CA3E4946876B7DB`.
 - ABOT NSIS installer: `target/debug/bundle/nsis/ABOT_0.1.0_x64-setup.exe` (2,629,327 bytes), SHA-256 `FB21375FA63A6447095CD797FAFCADBF2C3C9BADE6A658A1DA4253960E91AC89`.
 - ABOT MSI installer: `target/debug/bundle/msi/ABOT_0.1.0_x64_en-US.msi` (4,382,720 bytes), SHA-256 `DC428E26163FA2DABE9EEBFE37E37EE3A76AE6D84AA6523E93A6B0B14D6402F9`.
+
+## Cross-platform frontend redesign - 2026-11-07
+
+- Windows: `pnpm --filter @abot/windows test` passed all 5 gesture-sequence tests; `pnpm --filter @abot/windows typecheck` passed; `pnpm --filter @abot/windows build` passed with 39 transformed modules; `pnpm --filter @abot/windows exec tauri build --debug --no-bundle` produced the updated native executable; the executable remained alive for a three-second smoke test.
+- Android: with `ANDROID_HOME` set to the installed SDK, `gradlew.bat testDebugUnitTest assembleDebug lintDebug --no-daemon` passed. The six test suites contain 13 tests with zero failures, the debug APK assembled, and lint completed successfully.
+- Visual checks: Windows Overview was inspected from local renders at 1440px and 768px. Android Home, Activity, Settings, and the real MediaStore-backed Gallery were inspected on the authorized Android 15/API 35 device. No camera frames or gallery media left the device during inspection.
+- Boundary: native Windows capture was unavailable because the Computer Use native pipe was absent. No new physical cross-device transfer or hash comparison was performed in this redesign pass, so the established hardware acceptance tasks remain pending.

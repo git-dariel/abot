@@ -27,12 +27,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -68,23 +66,37 @@ class ReceiveGestureActivity : ComponentActivity() {
         }
         previewView = PreviewView(this)
         setContent {
-            MaterialTheme(colorScheme = lightColorScheme(primary = Color.Black, onPrimary = Color.White)) {
-                Surface(Modifier.fillMaxSize()) {
+            AbotTheme {
+                Surface(Modifier.fillMaxSize(), color = AbotPaper) {
                     Column(
                         Modifier.systemBarsPadding().padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
-                        Text("Receive this file", style = MaterialTheme.typography.headlineMedium)
-                        Text("Show one open palm and hold it steady. File bytes start only after this phone confirms.")
+                        AbotSectionLabel("Receive gesture")
+                        Text("Catch this file.", style = MaterialTheme.typography.headlineLarge)
+                        Text("Hold one open palm", color = AbotBlue, style = MaterialTheme.typography.titleLarge)
+                        Text("File bytes start only after this phone confirms.", color = AbotMuted, style = MaterialTheme.typography.bodySmall)
                         AndroidView(
                             factory = { previewView },
-                            modifier = Modifier.fillMaxWidth().weight(1f).background(Color.Black),
+                            modifier = Modifier.fillMaxWidth().weight(1f).background(AbotInk),
                         )
-                        Text(message)
-                        Text("Camera frames stay on this phone.", style = MaterialTheme.typography.bodySmall)
+                        Surface(color = AbotSoft, modifier = Modifier.fillMaxWidth()) {
+                            Text(message, Modifier.padding(14.dp), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                        }
+                        Text("Camera frames stay on this phone.", style = MaterialTheme.typography.bodySmall, color = AbotMuted)
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            OutlinedButton(onClick = { finish() }, modifier = Modifier.weight(1f)) { Text("Not now") }
-                            Button(onClick = ::accept, modifier = Modifier.weight(1f)) { Text("Receive without gesture") }
+                            OutlinedButton(
+                                onClick = { finish() },
+                                modifier = Modifier.weight(1f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, AbotInk),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp),
+                            ) { Text("Not now") }
+                            Button(
+                                onClick = ::accept,
+                                modifier = Modifier.weight(1f),
+                                colors = abotBlueButtonColors(),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp),
+                            ) { Text("Receive now") }
                         }
                     }
                 }

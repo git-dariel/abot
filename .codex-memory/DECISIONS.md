@@ -51,3 +51,7 @@ Persist the Windows Ed25519 private identity in Windows Credential Manager and d
 ## ADR-010: Possession-authenticated trusted reconnect
 
 After a successful QR-approved transfer, provision a random per-phone reconnect credential only inside the encrypted offer. Protect it at rest with Android Keystore and Windows Credential Manager. Generate separate signed QR and discovery invitations so the QR session secret is never advertised. For repeat sessions, advertise only the discovery invitation as untrusted input, use its nonce as a challenge, and require an HMAC-SHA-256 proof over the challenge, receiver identity key, and Android installation UUID. Derive the reconnect AES key from a separate HMAC domain. This removes repeat QR scanning without treating discovery as identity; Android asymmetric identity and replay caching remain separate hardening work.
+
+## ADR-014: Shared editorial design, platform-native structure
+
+Use one cross-platform visual language built from paper white, ink black, cornflower blue, hard one-pixel borders, generous whitespace, and bold editorial headings. Share tokens and component principles, but keep navigation platform-appropriate: a responsive desktop sidebar that becomes a bottom bar on narrow Windows layouts, and Android top/bottom app bars with scrollable Compose content. Show only real receiver, transfer, pairing, and session state; do not invent dashboard metrics or persistent history. Keep the redesign inside the presentation layer and preserve all protocol, consent, streaming, verification, and local-first boundaries.

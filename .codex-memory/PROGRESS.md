@@ -60,3 +60,17 @@
 - Real-camera hardware validation of the Downloads/gesture slice; see `docs/testing/gestures.md`.
 
 - Record hashes/environment details for the user-reported successful transfer and reconnect. Windows-to-Android transfer, Android asymmetric identity, replay cache, multi-file/cancellation/resume, gesture hardware acceptance, and signed release artifacts remain pending.
+
+## Cross-platform frontend redesign - 2026-11-07
+
+### Implemented
+
+- Windows and Android now share the exact paper-white (`#FFFFFF`), ink-black (`#050505`), and cornflower-blue (`#548CFF`) visual system, typography hierarchy, borders, status treatments, and action language. Windows provides responsive Overview, Activity, and Settings navigation plus redesigned receiver, sender, pairing, progress, error, empty, and notification states. Android provides responsive Home, Activity, Settings, Gallery, outgoing gesture, and incoming gesture screens with real connection/transfer state and Android-appropriate navigation. No transfer protocol or consent boundary changed.
+
+### Verified
+
+- Five Windows gesture tests, TypeScript typecheck, Vite production build, native Tauri debug build, and a three-second native process smoke passed. Thirteen Android unit tests, debug APK assembly, and lint passed after configuring the installed SDK through `ANDROID_HOME`. Browser renders were inspected at desktop/tablet widths; Android Home, Activity, Settings, and Gallery were inspected on the authorized API 35 device.
+
+### Pending
+
+- Run one complete phone-to-Windows and one complete Windows-to-phone transfer on the redesigned screens and record hashes. Native Windows visual capture remains unavailable because the Computer Use native pipe is absent; connected-device UI checks are not substitutes for hardware transfer acceptance.

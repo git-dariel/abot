@@ -17,8 +17,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -111,53 +111,69 @@ internal fun AbotGalleryScreen(
         loading = false
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = onBack, enabled = !isBusy) { Text("Back") }
-            Column(modifier = Modifier.padding(start = 14.dp)) {
-                Text("ABOT Gallery", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)
-                Text("Open a photo, then grab it.", color = Color.LightGray, fontSize = 13.sp)
+    Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedButton(
+                onClick = onBack,
+                enabled = !isBusy,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, AbotInk),
+            ) { Text("← Back") }
+            Column(modifier = Modifier.padding(start = 14.dp).weight(1f)) {
+                AbotSectionLabel("MediaStore photos")
+                Text("Gallery.", style = MaterialTheme.typography.headlineLarge)
             }
+            AbotStatusPill(
+                label = if (receiverReady) "PC ready" else if (isDiscovering) "Finding" else "Offline",
+                connected = receiverReady,
+            )
         }
-        Surface(color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    when {
-                        receiverReady -> "Trusted Windows receiver ready"
-                        isDiscovering -> "Finding your trusted Windows PC..."
-                        else -> "Windows receiver is not connected"
-                    },
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(statusMessage, color = Color.LightGray, fontSize = 12.sp)
+        Surface(color = if (receiverReady) AbotInk else AbotSoft, modifier = Modifier.fillMaxWidth()) {
+            Row(Modifier.padding(horizontal = 18.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
+                Surface(shape = androidx.compose.foundation.shape.CircleShape, color = if (receiverReady) AbotBlue else Color(0xFFAAAAAA)) {
+                    Text(" ", fontSize = 5.sp, modifier = Modifier.padding(3.dp))
+                }
+                Column(Modifier.padding(start = 10.dp)) {
+                    Text(
+                        if (receiverReady) "Open a photo, then grab it." else statusMessage,
+                        color = if (receiverReady) AbotPaper else AbotInk,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                    )
+                    if (receiverReady) Text("Palm → fist sends the encrypted offer.", color = Color(0xFFBDBDBD), fontSize = 11.sp)
+                }
             }
         }
         when {
             !hasPhotoAccess -> {
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(top = 40.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 64.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    Text("Allow photo access to use ABOT Gallery.")
-                    Button(onClick = onRequestAccess, colors = monochromeButtonColors()) {
+                    Text("Photos stay private.", style = MaterialTheme.typography.headlineMedium)
+                    Text("Allow access only to the photos you want available inside ABOT.", color = AbotMuted)
+                    Button(onClick = onRequestAccess, colors = abotBlueButtonColors(), shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp)) {
                         Text("Allow photo access", fontWeight = FontWeight.Bold)
                     }
                 }
             }
             loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Color.White)
+                CircularProgressIndicator(color = AbotBlue)
             }
-            loadError != null -> Text(loadError!!, color = Color.White)
-            photos.isEmpty() -> Text("No allowed photos were found on this phone.")
+            loadError != null -> Text(loadError!!, color = AbotDanger, modifier = Modifier.padding(20.dp))
+            photos.isEmpty() -> Column(Modifier.fillMaxWidth().padding(40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("No photos yet.", style = MaterialTheme.typography.headlineMedium)
+                Text("Allow more photos from Android settings.", color = AbotMuted, modifier = Modifier.padding(top = 8.dp))
+            }
             else -> LazyVerticalGrid(
-                columns = GridCells.Adaptive(112.dp),
-                modifier = Modifier.fillMaxSize(),
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
-                verticalArrangement = Arrangement.spacedBy(3.dp),
+                columns = GridCells.Adaptive(118.dp),
+                modifier = Modifier.fillMaxSize().padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 items(photos, key = { it.uri.toString() }) { photo ->
                     GalleryThumbnail(
@@ -176,8 +192,8 @@ private fun GalleryThumbnail(photo: GalleryPhoto, enabled: Boolean, onClick: () 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .size(120.dp)
-            .background(Color(0xFF222222))
+            .height(132.dp)
+            .background(AbotSoft)
             .clickable(enabled = enabled, onClick = onClick),
     ) {
         MediaStoreImage(
@@ -187,7 +203,7 @@ private fun GalleryThumbnail(photo: GalleryPhoto, enabled: Boolean, onClick: () 
             modifier = Modifier.fillMaxSize(),
             contentDescription = photo.name,
         )
-        if (!enabled) Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)))
+        if (!enabled) Box(Modifier.fillMaxSize().background(AbotPaper.copy(alpha = 0.62f)))
     }
 }
 

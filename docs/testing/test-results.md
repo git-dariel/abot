@@ -1,5 +1,13 @@
 # Test Results
 
+## Mobile relaunch reconnect repair - 2026-11-07
+
+- Root cause: the persistent Android foreground service and each recreated Activity independently started trusted NSD discovery. The Activity also restored an endpoint only in local Compose state, so the two owners could race and leave the UI using an expired Windows host/port after relaunch or receiver rotation.
+- Fix: `TrustedReceiverService` is now the sole discovery/poll owner and publishes a process-local connection snapshot to the Activity. It coalesces scheduled work, prevents overlapping discovery, discards stale endpoints after recoverable failures, retries with a capped exponential backoff, and accepts an explicit reconnect action. The Windows receiver supervisor now starts during native Tauri setup and repeated start requests are idempotent.
+- Passed: Android `testDebugUnitTest assembleDebug lintDebug` (13 unit tests); `cargo clippy --workspace --all-targets --all-features -- -D warnings`; `cargo test --workspace` (19 tests); Windows gesture tests (5), typecheck, and production build.
+- Device validation: installed the 69,943,023-byte APK (SHA-256 `D843AE9F2299281F3236AC3CDC80351F02C3EDCBB012C592185DAEAA56429498`) with app data preserved on an Android 15/API 35 Infinix X6880. Three force-stop/relaunch cycles reconnected on the first observed UI poll. Background/foreground return retained the foreground service and connection. Wi-Fi off/on recovered to `PC connected`. Stopping Windows changed Android to its searching state; restarting Windows restored `PC connected`, with exactly one Android receiver service active.
+- Boundary: these checks validated connection lifecycle and recovery. They did not send a file, exercise a locked-screen notification, or compare transfer hashes.
+
 ## Minimal lifecycle and bidirectional transfer slice - 2026-11-05
 
 - Automatic receive lifecycle and white-first UI: Android trusted discovery retries without another QR scan; Windows re-arms after completed/rejected receives, hides pairing details until requested, and uses a completion toast. Android places QR scanning in the top-right icon action.

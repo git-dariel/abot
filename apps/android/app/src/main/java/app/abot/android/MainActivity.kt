@@ -43,7 +43,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -84,6 +83,7 @@ class MainActivity : ComponentActivity() {
 
     private var requestedReceiveId by mutableStateOf<String?>(null)
     private var completedReceiveName by mutableStateOf<String?>(null)
+    private var trustedConnection by mutableStateOf(TrustedConnectionSnapshot())
     private var receiverRegistered = false
     private val transferEvents = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -96,6 +96,9 @@ class MainActivity : ComponentActivity() {
                     completedReceiveName = name
                     Toast.makeText(context, "$name received from Windows.", Toast.LENGTH_LONG).show()
                 }
+                TrustedReceiverService.ACTION_CONNECTION_CHANGED -> {
+                    trustedConnection = TrustedReceiverService.connectionSnapshot()
+                }
             }
         }
     }
@@ -104,10 +107,12 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         requestedReceiveId = intent.receiveTransferId()
             ?: TrustedReceiverService.pendingOffer()?.transferId?.toString()
+        trustedConnection = TrustedReceiverService.connectionSnapshot()
         setContent {
             AbotApp(
                 requestedReceiveId = requestedReceiveId,
                 completedReceiveName = completedReceiveName,
+                trustedConnection = trustedConnection,
                 onReceiveRequestConsumed = { requestedReceiveId = null },
                 onCompletedReceiveConsumed = { completedReceiveName = null },
             )
@@ -130,12 +135,14 @@ class MainActivity : ComponentActivity() {
                 IntentFilter().apply {
                     addAction(TrustedReceiverService.ACTION_OFFER_AVAILABLE)
                     addAction(TrustedReceiverService.ACTION_TRANSFER_COMPLETED)
+                    addAction(TrustedReceiverService.ACTION_CONNECTION_CHANGED)
                 },
                 ContextCompat.RECEIVER_NOT_EXPORTED,
             )
             receiverRegistered = true
         }
         TrustedReceiverService.consumeCompletedFile()?.let { completedReceiveName = it }
+        trustedConnection = TrustedReceiverService.connectionSnapshot()
     }
 
     override fun onStop() {
@@ -154,18 +161,16 @@ class MainActivity : ComponentActivity() {
 private fun AbotApp(
     requestedReceiveId: String?,
     completedReceiveName: String?,
+    trustedConnection: TrustedConnectionSnapshot,
     onReceiveRequestConsumed: () -> Unit,
     onCompletedReceiveConsumed: () -> Unit,
 ) {
     val context = LocalContext.current
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val trustedDevices = remember { TrustedDeviceStore(context) }
-    val trustedDiscovery = remember { TrustedDeviceDiscovery(context, trustedDevices) }
     var selectedUri by rememberSaveable { mutableStateOf<Uri?>(null) }
     var galleryOpen by rememberSaveable { mutableStateOf(false) }
     var galleryRefreshKey by rememberSaveable { mutableStateOf(0) }
-    var galleryDiscoveryAttempted by rememberSaveable { mutableStateOf(false) }
-    var discoveryRetryToken by rememberSaveable { mutableStateOf(0) }
     var showAdvanced by rememberSaveable { mutableStateOf(false) }
     var hasPhotoAccess by remember { mutableStateOf(hasGalleryPhotoAccess(context)) }
     var pairingLink by rememberSaveable { mutableStateOf("") }
@@ -176,8 +181,8 @@ private fun AbotApp(
         }
     }
     var pairingTrusted by rememberSaveable { mutableStateOf(false) }
+    var pairingFromService by rememberSaveable { mutableStateOf(false) }
     var showManualLink by rememberSaveable { mutableStateOf(false) }
-    var isDiscovering by remember { mutableStateOf(false) }
     var trustedReconnectReady by remember {
         mutableStateOf(trustedDevices.hasProvisionedReconnectCredential())
     }
@@ -194,15 +199,13 @@ private fun AbotApp(
         TransferState.TRANSFERRING,
         TransferState.VERIFYING,
     )
+    val isDiscovering = trustedConnection.isSearching
 
-    DisposableEffect(trustedDiscovery) {
-        onDispose { trustedDiscovery.stop() }
-    }
-
-    fun applyPairing(pairing: VerifiedPairing, link: String) {
+    fun applyPairing(pairing: VerifiedPairing, link: String, fromService: Boolean = false) {
         pairingLink = link
         verifiedPairingLink = link
         pairingTrusted = trustedDevices.isTrusted(pairing)
+        pairingFromService = fromService
         showManualLink = false
         statusMessage = if (pairing.isLegacy) {
             "Legacy link detected. It has no verified receiver identity."
@@ -237,6 +240,7 @@ private fun AbotApp(
             } catch (error: Exception) {
                 verifiedPairingLink = null
                 pairingTrusted = false
+                pairingFromService = false
                 transferState = TransferState.FAILED
                 statusMessage = error.message ?: "The pairing QR code is invalid."
             }
@@ -249,6 +253,7 @@ private fun AbotApp(
         } catch (error: Exception) {
             verifiedPairingLink = null
             pairingTrusted = false
+            pairingFromService = false
             transferState = TransferState.FAILED
             statusMessage = error.message ?: "The pairing link is invalid."
         }
@@ -262,28 +267,13 @@ private fun AbotApp(
         }
     }
 
-    fun discoverTrustedPc(foundMessage: String = "Trusted Windows receiver ready. Open a photo to continue.") {
-        if (isDiscovering) return
-        isDiscovering = true
-        statusMessage = "Looking for a previously trusted Windows receiver..."
-        trustedDiscovery.discover(
-            onFound = { discovered ->
-                isDiscovering = false
-                applyPairing(discovered.pairing, discovered.restorablePairingLink)
-                pairingTrusted = true
-                statusMessage = foundMessage
-            },
-            onFinished = { message ->
-                isDiscovering = false
-                statusMessage = message
-                if (trustedReconnectReady) {
-                    mainHandler.postDelayed({
-                        galleryDiscoveryAttempted = false
-                        discoveryRetryToken += 1
-                    }, 3_000)
-                }
-            },
-        )
+    fun reconnectTrustedPc() {
+        if (!trustedReconnectReady) return
+        verifiedPairingLink = null
+        pairingTrusted = false
+        pairingFromService = false
+        statusMessage = "Reconnecting to your trusted PC..."
+        TrustedReceiverService.reconnect(context)
     }
 
     fun sendFile() {
@@ -348,8 +338,8 @@ private fun AbotApp(
                     if (pairing.reconnectProofHex == null && result.reconnectProvisioned) {
                         verifiedPairingLink = null
                         pairingTrusted = false
-                        galleryDiscoveryAttempted = false
-                        discoveryRetryToken += 1
+                        pairingFromService = false
+                        TrustedReceiverService.start(context)
                         statusMessage = "Ready for another photo. Reconnecting with your trusted PC..."
                     } else {
                         statusMessage = "Ready for another photo. Your trusted PC stays connected."
@@ -367,8 +357,8 @@ private fun AbotApp(
                     mainHandler.post {
                         verifiedPairingLink = null
                         pairingTrusted = false
-                        galleryDiscoveryAttempted = false
-                        discoveryRetryToken += 1
+                        pairingFromService = false
+                        TrustedReceiverService.reconnect(context)
                     }
                 }
                 updateState(
@@ -411,10 +401,27 @@ private fun AbotApp(
     }
 
     val receiverReady = verifiedPairing != null && pairingTrusted
-    LaunchedEffect(receiverReady, trustedReconnectReady, discoveryRetryToken) {
-        if (!receiverReady && trustedReconnectReady && !galleryDiscoveryAttempted && !isBusy) {
-            galleryDiscoveryAttempted = true
-            discoverTrustedPc()
+    LaunchedEffect(trustedConnection.pairingLink, trustedConnection.message, trustedReconnectReady, isBusy) {
+        val link = trustedConnection.pairingLink
+        if (link != null && link != verifiedPairingLink) {
+            runCatching { TrustedReconnectProtocol.resolve(link, trustedDevices) }
+                .onSuccess { pairing ->
+                    applyPairing(pairing, link, fromService = true)
+                    pairingTrusted = true
+                    statusMessage = "Trusted Windows receiver ready. Open a photo to continue."
+                }
+                .onFailure {
+                    verifiedPairingLink = null
+                    pairingTrusted = false
+                    statusMessage = it.message ?: "The trusted connection could not be restored."
+                }
+        } else if (link == null && trustedReconnectReady && !isBusy) {
+            if (pairingFromService) {
+                verifiedPairingLink = null
+                pairingTrusted = false
+                pairingFromService = false
+            }
+            if (verifiedPairingLink == null) statusMessage = trustedConnection.message
         }
     }
     LaunchedEffect(trustedReconnectReady) {
@@ -592,8 +599,7 @@ private fun AbotApp(
                 }
                 Button(
                     onClick = {
-                        galleryDiscoveryAttempted = false
-                        discoveryRetryToken += 1
+                        if (!receiverReady && trustedReconnectReady) reconnectTrustedPc()
                         galleryRefreshKey += 1
                         galleryOpen = true
                     },
@@ -610,8 +616,7 @@ private fun AbotApp(
                 if (showAdvanced) {
                     OutlinedButton(
                         onClick = {
-                            galleryDiscoveryAttempted = false
-                            discoveryRetryToken += 1
+                            reconnectTrustedPc()
                         },
                         enabled = trustedReconnectReady && !isDiscovering && !isBusy,
                         modifier = Modifier.fillMaxWidth(),

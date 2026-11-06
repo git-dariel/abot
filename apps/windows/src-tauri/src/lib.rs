@@ -12,8 +12,8 @@ use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::collections::HashMap;
-use std::io::{self, Read, Write};
 use std::fs::File;
+use std::io::{self, Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
@@ -228,11 +228,20 @@ fn outgoing_status(selected_files: State<'_, SelectedFiles>) -> Result<OutgoingS
         .lock()
         .map_err(|_| "Selected-file state is unavailable".to_owned())?;
     Ok(if let Some(name) = selection.completed.clone() {
-        OutgoingSnapshot { state: "completed", file_name: Some(name) }
+        OutgoingSnapshot {
+            state: "completed",
+            file_name: Some(name),
+        }
     } else if selection.armed.is_some() {
-        OutgoingSnapshot { state: "armed", file_name: None }
+        OutgoingSnapshot {
+            state: "armed",
+            file_name: None,
+        }
     } else {
-        OutgoingSnapshot { state: "idle", file_name: None }
+        OutgoingSnapshot {
+            state: "idle",
+            file_name: None,
+        }
     })
 }
 
@@ -241,6 +250,14 @@ fn start_receiver(
     app: AppHandle,
     receiver: State<'_, ReceiverState>,
     selected_files: State<'_, SelectedFiles>,
+) -> Result<ReceiverSnapshot, String> {
+    ensure_receiver_started(app, &receiver, &selected_files)
+}
+
+fn ensure_receiver_started(
+    app: AppHandle,
+    receiver: &ReceiverState,
+    selected_files: &SelectedFiles,
 ) -> Result<ReceiverSnapshot, String> {
     eprintln!("ABOT receiver start requested");
     let destination = app
@@ -257,7 +274,7 @@ fn start_receiver(
             .lock()
             .map_err(|_| "Receiver state is unavailable".to_owned())?;
         if inner.running {
-            return Err("The receiver is already active".to_owned());
+            return Ok(inner.snapshot.clone());
         }
         inner.running = true;
         inner.snapshot.running = true;
@@ -284,7 +301,7 @@ fn start_receiver(
             );
         }
     });
-    receiver_status(receiver)
+    Ok(snapshot_without_secret(&receiver.0))
 }
 
 #[tauri::command]
@@ -775,11 +792,8 @@ fn handle_reverse_request(
     stream
         .set_write_timeout(Some(Duration::from_secs(120)))
         .map_err(|_| "Could not configure the reverse transfer".to_owned())?;
-    let (session_key, android_device_id) = authenticate_reconnect(
-        &mut stream,
-        &discovery_challenge,
-        receiver_identity_key,
-    )?;
+    let (session_key, android_device_id) =
+        authenticate_reconnect(&mut stream, &discovery_challenge, receiver_identity_key)?;
     let selected = {
         let selection = outgoing
             .lock()
@@ -812,7 +826,8 @@ fn handle_reverse_request(
         .ok_or_else(|| "The selected file name is not portable or safe".to_owned())?
         .to_owned();
     let transfer_id = Uuid::new_v4();
-    let digest = sha256_file(&path).map_err(|_| "The selected file could not be read".to_owned())?;
+    let digest =
+        sha256_file(&path).map_err(|_| "The selected file could not be read".to_owned())?;
     let response = serde_json::to_vec(&ReverseOffer {
         available: true,
         transfer_id: Some(transfer_id),
@@ -825,14 +840,16 @@ fn handle_reverse_request(
     .map_err(|_| "Could not create the reverse offer".to_owned())?;
     write_encrypted_frame(&mut stream, &session_key, REVERSE_OFFER_AAD, &response)
         .map_err(|_| "Could not send the reverse offer".to_owned())?;
-    let decision_bytes = read_encrypted_frame(&mut stream, &session_key, DECISION_AAD, MAX_CONTROL_FRAME)
-        .map_err(|_| "Android did not return an authenticated decision".to_owned())?;
+    let decision_bytes =
+        read_encrypted_frame(&mut stream, &session_key, DECISION_AAD, MAX_CONTROL_FRAME)
+            .map_err(|_| "Android did not return an authenticated decision".to_owned())?;
     let decision: TransferDecision = serde_json::from_slice(&decision_bytes)
         .map_err(|_| "Android returned a malformed decision".to_owned())?;
     if !decision.accepted {
         return Ok(());
     }
-    let mut source = File::open(&path).map_err(|_| "The selected file could not be opened".to_owned())?;
+    let mut source =
+        File::open(&path).map_err(|_| "The selected file could not be opened".to_owned())?;
     let mut buffer = [0_u8; 64 * 1024];
     let mut sequence = 0_u64;
     loop {
@@ -856,12 +873,19 @@ fn handle_reverse_request(
     stream
         .write_all(&0_u32.to_be_bytes())
         .map_err(|_| "Could not finish the encrypted file stream".to_owned())?;
-    stream.flush().map_err(|_| "Could not finish the encrypted file stream".to_owned())?;
-    let completion = read_encrypted_frame(&mut stream, &session_key, COMPLETE_AAD, MAX_CONTROL_FRAME)
-        .map_err(|_| "Android did not confirm the verified file".to_owned())?;
+    stream
+        .flush()
+        .map_err(|_| "Could not finish the encrypted file stream".to_owned())?;
+    let completion =
+        read_encrypted_frame(&mut stream, &session_key, COMPLETE_AAD, MAX_CONTROL_FRAME)
+            .map_err(|_| "Android did not confirm the verified file".to_owned())?;
     let completion: serde_json::Value = serde_json::from_slice(&completion)
         .map_err(|_| "Android returned a malformed completion".to_owned())?;
-    if completion.get("verified").and_then(serde_json::Value::as_bool) != Some(true) {
+    if completion
+        .get("verified")
+        .and_then(serde_json::Value::as_bool)
+        != Some(true)
+    {
         return Err("Android could not verify the received file".to_owned());
     }
     let mut selection = outgoing
@@ -1280,6 +1304,16 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(SelectedFiles::default())
         .manage(ReceiverState::default())
+        .setup(|app| {
+            let receiver = app.state::<ReceiverState>();
+            let selected_files = app.state::<SelectedFiles>();
+            if let Err(error) =
+                ensure_receiver_started(app.handle().clone(), &receiver, &selected_files)
+            {
+                eprintln!("ABOT receiver could not start during application setup: {error}");
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             protocol_status,
             select_files,

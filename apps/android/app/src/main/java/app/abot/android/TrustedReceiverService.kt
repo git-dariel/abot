@@ -13,19 +13,32 @@ import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import java.io.IOException
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeoutException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+
+internal data class TrustedConnectionSnapshot(
+    val pairingLink: String? = null,
+    val message: String = "Looking for your trusted PC...",
+    val isSearching: Boolean = false,
+)
 
 class TrustedReceiverService : Service() {
     companion object {
         const val ACTION_OFFER_AVAILABLE = "app.abot.android.action.OFFER_AVAILABLE"
         const val ACTION_TRANSFER_COMPLETED = "app.abot.android.action.TRANSFER_COMPLETED"
+        const val ACTION_CONNECTION_CHANGED = "app.abot.android.action.CONNECTION_CHANGED"
         const val EXTRA_TRANSFER_ID = "transferId"
         const val EXTRA_FILE_NAME = "fileName"
         const val EXTRA_FILE_SIZE = "fileSize"
+        const val EXTRA_PAIRING_LINK = "pairingLink"
+        const val EXTRA_CONNECTION_MESSAGE = "connectionMessage"
+        const val EXTRA_IS_SEARCHING = "isSearching"
         private const val ACTION_START = "app.abot.android.action.START_RECEIVER"
+        private const val ACTION_RECONNECT = "app.abot.android.action.RECONNECT_RECEIVER"
         private const val ACTION_ACCEPT = "app.abot.android.action.ACCEPT_TRANSFER"
         private const val ACTION_DECLINE = "app.abot.android.action.DECLINE_TRANSFER"
         private const val READY_CHANNEL = "abot_receiver"
@@ -35,6 +48,7 @@ class TrustedReceiverService : Service() {
 
         @Volatile private var pendingSnapshot: ReverseOffer? = null
         @Volatile private var lastCompletedFile: String? = null
+        @Volatile private var trustedConnectionSnapshot = TrustedConnectionSnapshot()
 
         fun start(context: Context) {
             ContextCompat.startForegroundService(
@@ -48,6 +62,15 @@ class TrustedReceiverService : Service() {
         }
 
         fun consumeCompletedFile(): String? = lastCompletedFile.also { lastCompletedFile = null }
+
+        internal fun connectionSnapshot(): TrustedConnectionSnapshot = trustedConnectionSnapshot
+
+        fun reconnect(context: Context) {
+            ContextCompat.startForegroundService(
+                context,
+                Intent(context, TrustedReceiverService::class.java).setAction(ACTION_RECONNECT),
+            )
+        }
 
         fun accept(context: Context, transferId: String) = sendDecision(context, ACTION_ACCEPT, transferId)
 
@@ -70,11 +93,15 @@ class TrustedReceiverService : Service() {
     private val worker = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val polling = AtomicBoolean(false)
+    private val discovering = AtomicBoolean(false)
     private val decisionLock = Any()
+    private val reconnectBackoff = ReconnectBackoff()
     private lateinit var trustedDevices: TrustedDeviceStore
     private lateinit var discovery: TrustedDeviceDiscovery
     private var pairing: VerifiedPairing? = null
+    private var pairingLink: String? = null
     private var pending: PendingDecision? = null
+    private var scheduledWork: Runnable? = null
     private var destroyed = false
 
     override fun onCreate() {
@@ -94,6 +121,7 @@ class TrustedReceiverService : Service() {
         when (intent?.action) {
             ACTION_ACCEPT -> resolveDecision(intent.getStringExtra(EXTRA_TRANSFER_ID), true)
             ACTION_DECLINE -> resolveDecision(intent.getStringExtra(EXTRA_TRANSFER_ID), false)
+            ACTION_RECONNECT -> restartConnection()
             else -> if (trustedDevices.hasProvisionedReconnectCredential()) scheduleWork(0) else stopSelf()
         }
         return START_STICKY
@@ -103,25 +131,49 @@ class TrustedReceiverService : Service() {
 
     private fun scheduleWork(delayMs: Long) {
         if (destroyed) return
-        mainHandler.postDelayed({
-            if (destroyed || polling.get()) return@postDelayed
-            pairing?.let(::poll) ?: discover()
-        }, delayMs)
+        mainHandler.post {
+            if (destroyed) return@post
+            scheduledWork?.let(mainHandler::removeCallbacks)
+            val work = Runnable {
+                scheduledWork = null
+                if (destroyed || polling.get() || discovering.get()) return@Runnable
+                pairing?.let(::poll) ?: discover()
+            }
+            scheduledWork = work
+            mainHandler.postDelayed(work, delayMs)
+        }
     }
 
     private fun discover() {
-        updateForeground("Finding your trusted PC...")
+        if (!discovering.compareAndSet(false, true)) return
+        publishConnection(null, "Finding your trusted PC...", isSearching = true)
         discovery.discover(
             onFound = { found ->
+                discovering.set(false)
                 pairing = found.pairing
-                updateForeground("Ready for files from Windows")
+                pairingLink = found.restorablePairingLink
+                reconnectBackoff.reset()
+                publishConnection(found.restorablePairingLink, "Connected to your trusted PC", isSearching = false)
                 poll(found.pairing)
             },
             onFinished = { message ->
-                updateForeground(message)
-                scheduleWork(5_000)
+                discovering.set(false)
+                publishConnection(null, message, isSearching = false)
+                scheduleWork(reconnectBackoff.nextDelay())
             },
         )
+    }
+
+    private fun restartConnection() {
+        pairing = null
+        pairingLink = null
+        reconnectBackoff.reset()
+        publishConnection(null, "Reconnecting to your trusted PC...", isSearching = true)
+        if (!polling.get()) {
+            discovery.stop()
+            discovering.set(false)
+            scheduleWork(0)
+        }
     }
 
     private fun poll(currentPairing: VerifiedPairing) {
@@ -148,14 +200,11 @@ class TrustedReceiverService : Service() {
                 }
             } catch (error: Exception) {
                 val detail = error.message ?: "Trusted receiver connection failed"
-                if (
-                    detail.contains("Connection refused", ignoreCase = true) ||
-                    detail.contains("timed out", ignoreCase = true) ||
-                    detail.contains("reset", ignoreCase = true)
-                ) {
+                if (shouldRefreshEndpoint(error)) {
                     pairing = null
+                    pairingLink = null
                 }
-                updateForeground(detail)
+                publishConnection(pairingLink, connectionFailureMessage(error, detail), isSearching = false)
             } finally {
                 synchronized(decisionLock) {
                     pending = null
@@ -163,9 +212,18 @@ class TrustedReceiverService : Service() {
                 }
                 getSystemService(NotificationManager::class.java).cancel(OFFER_ID)
                 polling.set(false)
-                scheduleWork(3_000)
+                scheduleWork(if (pairing == null) reconnectBackoff.nextDelay() else 3_000)
             }
         }
+    }
+
+    private fun shouldRefreshEndpoint(error: Exception): Boolean =
+        error is IOException || error is SecurityException || error is IllegalArgumentException
+
+    private fun connectionFailureMessage(error: Exception, detail: String): String = when {
+        error is TimeoutException -> "The incoming transfer expired. ABOT is ready to try again."
+        shouldRefreshEndpoint(error) -> "Connection interrupted. Finding your trusted PC again..."
+        else -> detail
     }
 
     private fun awaitDecision(offer: ReverseOffer): Boolean {
@@ -214,6 +272,18 @@ class TrustedReceiverService : Service() {
 
     private fun updateForeground(text: String) {
         getSystemService(NotificationManager::class.java).notify(FOREGROUND_ID, readyNotification(text))
+    }
+
+    private fun publishConnection(link: String?, message: String, isSearching: Boolean) {
+        trustedConnectionSnapshot = TrustedConnectionSnapshot(link, message, isSearching)
+        updateForeground(message)
+        sendBroadcast(
+            Intent(ACTION_CONNECTION_CHANGED)
+                .setPackage(packageName)
+                .putExtra(EXTRA_PAIRING_LINK, link)
+                .putExtra(EXTRA_CONNECTION_MESSAGE, message)
+                .putExtra(EXTRA_IS_SEARCHING, isSearching),
+        )
     }
 
     private fun notifyOffer(offer: ReverseOffer) {
@@ -280,10 +350,16 @@ class TrustedReceiverService : Service() {
 
     override fun onDestroy() {
         destroyed = true
+        scheduledWork?.let(mainHandler::removeCallbacks)
+        scheduledWork = null
         discovery.stop()
+        discovering.set(false)
         synchronized(decisionLock) { pending?.result?.complete(false) }
         worker.shutdownNow()
         pendingSnapshot = null
+        trustedConnectionSnapshot = TrustedConnectionSnapshot(
+            message = "Background receiver stopped. Open ABOT to reconnect.",
+        )
         super.onDestroy()
     }
 }

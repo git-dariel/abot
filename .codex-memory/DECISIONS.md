@@ -1,5 +1,9 @@
 # Decisions
 
+## ADR-013: One reconnect owner per platform process
+
+Keep Android trusted discovery, reverse polling, retry scheduling, and the current endpoint under the unexported `connectedDevice` foreground service. Activities observe a service connection snapshot and may request a reconnect, but never create a competing NSD discovery session. Invalidate service-sourced endpoints after recoverable connection failures and rediscover with capped backoff. Start the Windows listener supervisor during native Tauri setup so receiver availability does not depend on React mounting; make repeated start commands idempotent.
+
 ## ADR-012: Foreground ABOT Gallery gesture flow
 
 Approximate Huawei's documented open-palm-to-fist transfer UX within normal Android application privileges by owning the photo-viewing surface. ABOT Gallery reads only user-granted MediaStore images, reconnects to an already trusted Windows receiver, and opens the local gesture camera automatically when the user opens a photo. The current photo becomes the offer source; palm-to-fist creates the offer, while Windows independently detects fist-to-palm as the receiving user's acceptance before file bytes move. Keep the conventional picker and buttons as fallback. Do not claim integration with another vendor's Gallery, background Android camera access, or cross-camera hand tracking. This supersedes ADR-011's explicit camera-enable step only for the ABOT Gallery and approved-offer fast path.

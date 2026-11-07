@@ -3,9 +3,9 @@
 ## Implemented
 
 - Windows resolves the OS Downloads folder and creates it if missing. No destination picker is required. Existing filenames still fail safely rather than being overwritten.
-- ABOT Gallery queries only Android MediaStore photos covered by the user's permission grant. Entering the gallery automatically searches for a provisioned trusted receiver; opening a photo previews it and starts the local palm-to-fist camera without separate Select or Gesture buttons.
+- ABOT Gallery queries only Android MediaStore photos and videos covered by the user's permission grant. Users may select and deselect mixed media, then Continue to the local palm-to-fist Grab page. Receiver discovery starts only from the Settings toggle.
 - The Windows receiver starts when the desktop app launches. For an identity-approved pending offer, the fist-to-palm acceptance camera starts automatically; buttons remain available for accessibility and recovery.
-- Android: select a document, establish trust, then explicitly open the front camera with **Grab with hand gesture**. Stable open palm followed by stable closed fist offers that file.
+- Android: select one or more documents with the native picker, or mixed media in ABOT Gallery. Selection confirmation opens the Grab page automatically. Stable open palm followed by stable closed fist arms the batch; every file remains a separate consent-bound offer.
 - Windows: review the incoming offer, approve pairing if needed, and enable gesture acceptance. Stable closed fist followed by stable open palm accepts the reviewed offer. A transfer-ID check rejects stale decisions.
 - Both poses require confidence >= 0.55, exactly one detected hand, and a 350 ms hold. The second pose must arrive within 12 seconds. Frame gaps longer than 3 seconds reset the sequence, allowing slower phones to retain deliberate poses without accepting stale input; repeated frames cannot re-trigger a completed action.
 - Android displays the detected pose/confidence, vibrates when the palm locks and grab completes, and reports when the offer reaches Windows or the connection fails. Windows displays camera-ready, fist-confidence, and fist-locked states.

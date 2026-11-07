@@ -22,8 +22,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 internal data class TrustedConnectionSnapshot(
     val pairingLink: String? = null,
-    val message: String = "Looking for your trusted PC...",
+    val message: String = "Windows receiver discovery is off.",
     val isSearching: Boolean = false,
+    val discoveryEnabled: Boolean = false,
 )
 
 class TrustedReceiverService : Service() {
@@ -38,6 +39,7 @@ class TrustedReceiverService : Service() {
         const val EXTRA_CONNECTION_MESSAGE = "connectionMessage"
         const val EXTRA_IS_SEARCHING = "isSearching"
         private const val ACTION_START = "app.abot.android.action.START_RECEIVER"
+        private const val ACTION_STOP = "app.abot.android.action.STOP_RECEIVER"
         private const val ACTION_RECONNECT = "app.abot.android.action.RECONNECT_RECEIVER"
         private const val ACTION_ACCEPT = "app.abot.android.action.ACCEPT_TRANSFER"
         private const val ACTION_DECLINE = "app.abot.android.action.DECLINE_TRANSFER"
@@ -49,12 +51,25 @@ class TrustedReceiverService : Service() {
         @Volatile private var pendingSnapshot: ReverseOffer? = null
         @Volatile private var lastCompletedFile: String? = null
         @Volatile private var trustedConnectionSnapshot = TrustedConnectionSnapshot()
+        @Volatile private var discoveryAllowed = false
+        @Volatile private var serviceRunning = false
 
-        fun start(context: Context) {
+        fun enableDiscovery(context: Context) {
+            discoveryAllowed = true
             ContextCompat.startForegroundService(
                 context,
                 Intent(context, TrustedReceiverService::class.java).setAction(ACTION_START),
             )
+        }
+
+        fun disableDiscovery(context: Context) {
+            discoveryAllowed = false
+            trustedConnectionSnapshot = TrustedConnectionSnapshot()
+            if (serviceRunning) {
+                context.startService(
+                    Intent(context, TrustedReceiverService::class.java).setAction(ACTION_STOP),
+                )
+            }
         }
 
         internal fun pendingOffer(transferId: String? = null): ReverseOffer? = pendingSnapshot?.takeIf {
@@ -65,7 +80,10 @@ class TrustedReceiverService : Service() {
 
         internal fun connectionSnapshot(): TrustedConnectionSnapshot = trustedConnectionSnapshot
 
+        internal fun isDiscoveryEnabled(): Boolean = discoveryAllowed
+
         fun reconnect(context: Context) {
+            if (!discoveryAllowed) return
             ContextCompat.startForegroundService(
                 context,
                 Intent(context, TrustedReceiverService::class.java).setAction(ACTION_RECONNECT),
@@ -106,6 +124,7 @@ class TrustedReceiverService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        serviceRunning = true
         trustedDevices = TrustedDeviceStore(this)
         discovery = TrustedDeviceDiscovery(this, trustedDevices)
         createChannels()
@@ -121,22 +140,27 @@ class TrustedReceiverService : Service() {
         when (intent?.action) {
             ACTION_ACCEPT -> resolveDecision(intent.getStringExtra(EXTRA_TRANSFER_ID), true)
             ACTION_DECLINE -> resolveDecision(intent.getStringExtra(EXTRA_TRANSFER_ID), false)
-            ACTION_RECONNECT -> restartConnection()
-            else -> if (trustedDevices.hasProvisionedReconnectCredential()) scheduleWork(0) else stopSelf()
+            ACTION_RECONNECT -> if (discoveryAllowed) restartConnection()
+            ACTION_STOP -> stopDiscovery()
+            ACTION_START -> {
+                discoveryAllowed = true
+                if (trustedDevices.hasProvisionedReconnectCredential()) scheduleWork(0) else stopDiscovery()
+            }
+            else -> stopDiscovery()
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun scheduleWork(delayMs: Long) {
-        if (destroyed) return
+        if (destroyed || !discoveryAllowed) return
         mainHandler.post {
-            if (destroyed) return@post
+            if (destroyed || !discoveryAllowed) return@post
             scheduledWork?.let(mainHandler::removeCallbacks)
             val work = Runnable {
                 scheduledWork = null
-                if (destroyed || polling.get() || discovering.get()) return@Runnable
+                if (destroyed || !discoveryAllowed || polling.get() || discovering.get()) return@Runnable
                 pairing?.let(::poll) ?: discover()
             }
             scheduledWork = work
@@ -145,6 +169,7 @@ class TrustedReceiverService : Service() {
     }
 
     private fun discover() {
+        if (!discoveryAllowed) return
         if (!discovering.compareAndSet(false, true)) return
         publishConnection(null, "Finding your trusted PC...", isSearching = true)
         discovery.discover(
@@ -165,6 +190,7 @@ class TrustedReceiverService : Service() {
     }
 
     private fun restartConnection() {
+        if (!discoveryAllowed) return
         pairing = null
         pairingLink = null
         reconnectBackoff.reset()
@@ -212,9 +238,36 @@ class TrustedReceiverService : Service() {
                 }
                 getSystemService(NotificationManager::class.java).cancel(OFFER_ID)
                 polling.set(false)
-                scheduleWork(if (pairing == null) reconnectBackoff.nextDelay() else 3_000)
+                if (discoveryAllowed) {
+                    scheduleWork(if (pairing == null) reconnectBackoff.nextDelay() else 3_000)
+                } else {
+                    stopWhenIdle()
+                }
             }
         }
+    }
+
+    private fun stopDiscovery() {
+        discoveryAllowed = false
+        scheduledWork?.let(mainHandler::removeCallbacks)
+        scheduledWork = null
+        discovery.stop()
+        discovering.set(false)
+        pairing = null
+        pairingLink = null
+        publishConnection(null, "Windows receiver discovery is off.", isSearching = false)
+        stopWhenIdle()
+    }
+
+    private fun stopWhenIdle() {
+        val activeTransfer = synchronized(decisionLock) { pending != null }
+        if (activeTransfer) {
+            updateForeground("Finishing the active transfer...")
+            return
+        }
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        getSystemService(NotificationManager::class.java).cancel(FOREGROUND_ID)
+        stopSelf()
     }
 
     private fun shouldRefreshEndpoint(error: Exception): Boolean =
@@ -275,8 +328,8 @@ class TrustedReceiverService : Service() {
     }
 
     private fun publishConnection(link: String?, message: String, isSearching: Boolean) {
-        trustedConnectionSnapshot = TrustedConnectionSnapshot(link, message, isSearching)
-        updateForeground(message)
+        trustedConnectionSnapshot = TrustedConnectionSnapshot(link, message, isSearching, discoveryAllowed)
+        if (discoveryAllowed || synchronized(decisionLock) { pending != null }) updateForeground(message)
         sendBroadcast(
             Intent(ACTION_CONNECTION_CHANGED)
                 .setPackage(packageName)
@@ -357,9 +410,15 @@ class TrustedReceiverService : Service() {
         synchronized(decisionLock) { pending?.result?.complete(false) }
         worker.shutdownNow()
         pendingSnapshot = null
-        trustedConnectionSnapshot = TrustedConnectionSnapshot(
-            message = "Background receiver stopped. Open ABOT to reconnect.",
-        )
+        getSystemService(NotificationManager::class.java).cancel(FOREGROUND_ID)
+        serviceRunning = false
+        discoveryAllowed = false
+        trustedConnectionSnapshot = TrustedConnectionSnapshot()
         super.onDestroy()
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        stopDiscovery()
+        super.onTaskRemoved(rootIntent)
     }
 }

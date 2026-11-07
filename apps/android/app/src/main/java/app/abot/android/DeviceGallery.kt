@@ -48,35 +48,56 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-internal data class GalleryPhoto(val uri: Uri, val name: String)
+internal data class GalleryMedia(
+    val uri: Uri,
+    val name: String,
+    val mimeType: String,
+    val size: Long,
+    val isVideo: Boolean,
+)
 
 internal object DeviceGallery {
-    fun load(context: Context): List<GalleryPhoto> {
+    fun load(context: Context): List<GalleryMedia> {
         val projection = arrayOf(
-            MediaStore.Images.Media._ID,
-            MediaStore.Images.Media.DISPLAY_NAME,
+            MediaStore.Files.FileColumns._ID,
+            MediaStore.Files.FileColumns.DISPLAY_NAME,
+            MediaStore.Files.FileColumns.MIME_TYPE,
+            MediaStore.Files.FileColumns.SIZE,
+            MediaStore.Files.FileColumns.MEDIA_TYPE,
         )
-        val photos = mutableListOf<GalleryPhoto>()
+        val media = mutableListOf<GalleryMedia>()
         context.contentResolver.query(
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            MediaStore.Files.getContentUri("external"),
             projection,
-            null,
-            null,
-            "${MediaStore.Images.Media.DATE_ADDED} DESC",
+            "${MediaStore.Files.FileColumns.MEDIA_TYPE}=? OR ${MediaStore.Files.FileColumns.MEDIA_TYPE}=?",
+            arrayOf(
+                MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE.toString(),
+                MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO.toString(),
+            ),
+            "${MediaStore.Files.FileColumns.DATE_ADDED} DESC",
         )?.use { cursor ->
-            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
-            val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
+            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
+            val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.DISPLAY_NAME)
+            val mimeColumn = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MIME_TYPE)
+            val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.SIZE)
+            val mediaTypeColumn = cursor.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE)
             while (cursor.moveToNext()) {
-                photos += GalleryPhoto(
+                val mediaType = cursor.getInt(mediaTypeColumn)
+                media += GalleryMedia(
                     uri = ContentUris.withAppendedId(
-                        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        MediaStore.Files.getContentUri("external"),
                         cursor.getLong(idColumn),
                     ),
-                    name = cursor.getString(nameColumn) ?: "Photo",
+                    name = cursor.getString(nameColumn)
+                        ?: if (mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO) "Video" else "Photo",
+                    mimeType = cursor.getString(mimeColumn)
+                        ?: if (mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO) "video/*" else "image/*",
+                    size = cursor.getLong(sizeColumn).coerceAtLeast(0),
+                    isVideo = mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO,
                 )
             }
         }
-        return photos
+        return media
     }
 }
 
@@ -90,24 +111,30 @@ internal fun AbotGalleryScreen(
     refreshKey: Int,
     onBack: () -> Unit,
     onRequestAccess: () -> Unit,
-    onOpenPhoto: (Uri) -> Unit,
+    onConfirmSelection: (List<SelectedDocument>) -> Unit,
 ) {
     val context = LocalContext.current
-    var photos by remember(refreshKey) { mutableStateOf<List<GalleryPhoto>>(emptyList()) }
+    var media by remember(refreshKey) { mutableStateOf<List<GalleryMedia>>(emptyList()) }
+    var selectedKeys by remember(refreshKey) { mutableStateOf<Set<String>>(emptySet()) }
     var loading by remember(refreshKey) { mutableStateOf(hasPhotoAccess) }
     var loadError by remember(refreshKey) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(hasPhotoAccess, refreshKey) {
         if (!hasPhotoAccess) {
-            photos = emptyList()
+            media = emptyList()
+            selectedKeys = emptySet()
             loading = false
             return@LaunchedEffect
         }
         loading = true
         loadError = null
         runCatching { withContext(Dispatchers.IO) { DeviceGallery.load(context) } }
-            .onSuccess { photos = it }
-            .onFailure { loadError = "ABOT could not read the photos allowed on this phone." }
+            .onSuccess {
+                media = it
+                val available = it.mapTo(HashSet()) { item -> item.uri.toString() }
+                selectedKeys = selectedKeys.filterTo(LinkedHashSet()) { key -> key in available }
+            }
+            .onFailure { loadError = "ABOT could not read the photos and videos allowed on this phone." }
         loading = false
     }
 
@@ -123,7 +150,7 @@ internal fun AbotGalleryScreen(
                 border = androidx.compose.foundation.BorderStroke(1.dp, AbotInk),
             ) { Text("← Back") }
             Column(modifier = Modifier.padding(start = 14.dp).weight(1f)) {
-                AbotSectionLabel("MediaStore photos")
+                AbotSectionLabel("Photos & videos")
                 Text("Gallery.", style = MaterialTheme.typography.headlineLarge)
             }
             AbotStatusPill(
@@ -138,12 +165,14 @@ internal fun AbotGalleryScreen(
                 }
                 Column(Modifier.padding(start = 10.dp)) {
                     Text(
-                        if (receiverReady) "Open a photo, then grab it." else statusMessage,
+                        if (receiverReady) "Select one or more items to grab." else statusMessage,
                         color = if (receiverReady) AbotPaper else AbotInk,
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
                     )
-                    if (receiverReady) Text("Palm → fist sends the encrypted offer.", color = Color(0xFFBDBDBD), fontSize = 11.sp)
+                    if (receiverReady) {
+                        Text("Each item stays private until Windows accepts it.", color = Color(0xFFBDBDBD), fontSize = 11.sp)
+                    }
                 }
             }
         }
@@ -154,33 +183,71 @@ internal fun AbotGalleryScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    Text("Photos stay private.", style = MaterialTheme.typography.headlineMedium)
-                    Text("Allow access only to the photos you want available inside ABOT.", color = AbotMuted)
-                    Button(onClick = onRequestAccess, colors = abotBlueButtonColors(), shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp)) {
-                        Text("Allow photo access", fontWeight = FontWeight.Bold)
-                    }
+                    Text("Media stays private.", style = MaterialTheme.typography.headlineMedium)
+                    Text("Allow access only to the photos and videos you want available inside ABOT.", color = AbotMuted)
+                    Button(
+                        onClick = onRequestAccess,
+                        colors = abotBlueButtonColors(),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp),
+                    ) { Text("Allow media access", fontWeight = FontWeight.Bold) }
                 }
             }
             loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = AbotBlue)
             }
             loadError != null -> Text(loadError!!, color = AbotDanger, modifier = Modifier.padding(20.dp))
-            photos.isEmpty() -> Column(Modifier.fillMaxWidth().padding(40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("No photos yet.", style = MaterialTheme.typography.headlineMedium)
-                Text("Allow more photos from Android settings.", color = AbotMuted, modifier = Modifier.padding(top = 8.dp))
+            media.isEmpty() -> Column(Modifier.fillMaxWidth().padding(40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("No photos or videos yet.", style = MaterialTheme.typography.headlineMedium)
+                Text("Allow more media from Android settings.", color = AbotMuted, modifier = Modifier.padding(top = 8.dp))
             }
-            else -> LazyVerticalGrid(
-                columns = GridCells.Adaptive(118.dp),
-                modifier = Modifier.fillMaxSize().padding(4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                items(photos, key = { it.uri.toString() }) { photo ->
-                    GalleryThumbnail(
-                        photo = photo,
-                        enabled = receiverReady && !isBusy,
-                        onClick = { onOpenPhoto(photo.uri) },
-                    )
+            else -> Column(Modifier.fillMaxSize()) {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(118.dp),
+                    modifier = Modifier.weight(1f).padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    items(media, key = { it.uri.toString() }) { item ->
+                        val key = item.uri.toString()
+                        GalleryThumbnail(
+                            media = item,
+                            selected = key in selectedKeys,
+                            enabled = !isBusy,
+                            onClick = {
+                                selectedKeys = selectedKeys.toMutableSet().apply {
+                                    if (!add(key)) remove(key)
+                                }
+                            },
+                        )
+                    }
+                }
+                Surface(color = AbotPaper, border = androidx.compose.foundation.BorderStroke(1.dp, AbotInk)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("${selectedKeys.size} selected", fontWeight = FontWeight.Bold)
+                            Text("Photos and videos can be mixed.", color = AbotMuted, fontSize = 11.sp)
+                        }
+                        Button(
+                            onClick = {
+                                onConfirmSelection(media.filter { it.uri.toString() in selectedKeys }.map {
+                                    SelectedDocument(
+                                        uri = it.uri,
+                                        name = it.name,
+                                        mimeType = it.mimeType,
+                                        extension = it.name.substringAfterLast('.', "").takeIf(String::isNotBlank),
+                                        size = it.size,
+                                    )
+                                })
+                            },
+                            enabled = selectedKeys.isNotEmpty() && receiverReady && !isBusy,
+                            colors = abotBlueButtonColors(),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp),
+                        ) { Text("Continue") }
+                    }
                 }
             }
         }
@@ -188,7 +255,7 @@ internal fun AbotGalleryScreen(
 }
 
 @Composable
-private fun GalleryThumbnail(photo: GalleryPhoto, enabled: Boolean, onClick: () -> Unit) {
+private fun GalleryThumbnail(media: GalleryMedia, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -197,13 +264,24 @@ private fun GalleryThumbnail(photo: GalleryPhoto, enabled: Boolean, onClick: () 
             .clickable(enabled = enabled, onClick = onClick),
     ) {
         MediaStoreImage(
-            uri = photo.uri,
+            uri = media.uri,
             requestedSize = 320,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),
-            contentDescription = photo.name,
+            contentDescription = media.name,
         )
         if (!enabled) Box(Modifier.fillMaxSize().background(AbotPaper.copy(alpha = 0.62f)))
+        if (media.isVideo) {
+            Surface(color = AbotInk, modifier = Modifier.align(Alignment.BottomStart).padding(6.dp)) {
+                Text("VIDEO", color = AbotPaper, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp))
+            }
+        }
+        if (selected) {
+            Box(Modifier.fillMaxSize().background(AbotBlue.copy(alpha = 0.28f)))
+            Surface(color = AbotBlue, shape = androidx.compose.foundation.shape.CircleShape, modifier = Modifier.align(Alignment.TopEnd).padding(7.dp)) {
+                Text("✓", color = AbotInk, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+            }
+        }
     }
 }
 

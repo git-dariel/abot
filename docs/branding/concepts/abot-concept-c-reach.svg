@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 200" role="img" aria-labelledby="title desc">
+  <title id="title">Abot concept C, Near Loop</title>
+  <desc id="desc">Two offset rounded forms create a continuous near loop and a blue shared center beside the Abot wordmark.</desc>
+  <rect width="640" height="200" fill="#FFFFFF"/>
+  <g id="symbol" transform="translate(24 24)">
+    <path fill="#050505" d="M0 76C0 34 34 0 76 0h40v32H76c-24 0-44 20-44 44s20 44 44 44h16v32H76C34 152 0 118 0 76Z"/>
+    <path fill="#548CFF" d="M152 76c0 42-34 76-76 76H36v-32h40c24 0 44-20 44-44S100 32 76 32H60V0h16c42 0 76 34 76 76Z"/>
+    <rect x="60" y="60" width="32" height="32" rx="16" fill="#FFFFFF"/>
+    <rect x="70" y="70" width="12" height="12" rx="6" fill="#050505"/>
+  </g>
+  <g id="wordmark" fill="#050505" font-family="Geist, Inter, Arial, sans-serif">
+    <text x="212" y="116" font-size="82" font-weight="800" letter-spacing="-6">abot</text>
+    <circle cx="375" cy="106" r="8" fill="#548CFF"/>
+  </g>
+</svg>

@@ -59,7 +59,7 @@
 - Run and record the complete reverse hardware path: choose a Windows file, palm-to-fist release, accept on Android, confirm `Downloads/ABOT`, and compare hashes. Android background readiness now uses a foreground service; true Windows close-to-tray lifecycle and locked-phone notification acceptance still require hardware acceptance.
 - Real-camera hardware validation of the Downloads/gesture slice; see `docs/testing/gestures.md`.
 
-- Record hashes/environment details for the user-reported successful transfer and reconnect. Windows-to-Android transfer, Android asymmetric identity, replay cache, multi-file/cancellation/resume, gesture hardware acceptance, and signed release artifacts remain pending.
+- Record hashes/environment details for the user-reported successful transfer and reconnect. Windows-to-Android hardware acceptance, Android asymmetric identity, replay cache, batch cancellation/resume, gesture hardware acceptance, and signed release artifacts remain pending.
 
 ## Cross-platform frontend redesign - 2026-11-07
 
@@ -74,3 +74,19 @@
 ### Pending
 
 - Run one complete phone-to-Windows and one complete Windows-to-phone transfer on the redesigned screens and record hashes. Native Windows visual capture remains unavailable because the Computer Use native pipe is absent; connected-device UI checks are not substitutes for hardware transfer acceptance.
+
+## Multi-selection, discovery control, and logo concepts - 2026-11-08
+
+### Implemented
+
+- Android native picker and ABOT Gallery mixed multi-selection, preserved URI/name/MIME/extension/size metadata, deduplication, automatic Grab navigation, selected-item summaries, aggregate batch progress, and per-file success/failure handling over consecutive existing encrypted offers.
+- Session-only Windows Receiver Discovery toggle. Fresh launch is OFF; ON starts the non-sticky connected-device service; OFF cancels timers, retries, NSD, multicast resources, and the foreground notification without aborting a pending transfer.
+- Three approval-stage editable SVG logo concepts and a comparison board. Production icons were not changed.
+
+### Verified
+
+- Android 15 unit tests, debug APK assembly, and lint; five Windows gesture tests, TypeScript typecheck, and production build; all 19 Rust tests and strict Clippy. On the authorized Android 15/API 35 Infinix X6880, fresh launch showed discovery OFF with no service, ON created one receiver service and found the trusted PC, OFF removed it, both Gallery and native picker selected two items, and both opened a two-file Grab page with names and sizes.
+
+### Pending
+
+- Perform a physical palm-to-fist two-file send, accept both offers on Windows, and compare both hashes. Logo integration waits for explicit concept approval.

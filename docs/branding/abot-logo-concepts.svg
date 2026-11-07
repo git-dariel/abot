@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 960" role="img" aria-labelledby="title desc">
+  <title id="title">Three Abot logo concepts</title>
+  <desc id="desc">A presentation board comparing Bridge Pulse, Relay A, and Near Loop logo directions.</desc>
+  <rect width="1440" height="960" fill="#FFFFFF"/>
+  <text x="80" y="90" fill="#050505" font-family="Geist, Inter, Arial, sans-serif" font-size="58" font-weight="800" letter-spacing="-3">Abot identity concepts.</text>
+  <text x="82" y="130" fill="#666666" font-family="Geist, Inter, Arial, sans-serif" font-size="18">Approval study · production icons remain unchanged</text>
+
+  <g transform="translate(80 190)">
+    <rect width="1280" height="200" fill="#F5F6F8" stroke="#050505"/>
+    <g transform="translate(34 28) scale(.82)">
+      <path fill="#050505" d="M0 0h68v28H28v88h40v28H0z"/>
+      <path fill="#548CFF" d="M144 0H76v28h40v88H76v28h68z"/>
+      <rect x="58" y="58" width="28" height="28" rx="4" fill="#050505"/>
+      <circle cx="72" cy="72" r="6" fill="#FFFFFF"/>
+    </g>
+    <text x="210" y="84" fill="#050505" font-family="Geist, Inter, Arial, sans-serif" font-size="46" font-weight="800">A · Bridge Pulse</text>
+    <text x="210" y="126" fill="#666666" font-family="Geist, Inter, Arial, sans-serif" font-size="18">Abstract connectivity · two devices, one authenticated meeting point</text>
+    <text x="210" y="158" fill="#548CFF" font-family="Geist, Inter, Arial, sans-serif" font-size="15" font-weight="700">RECOMMENDED · strongest small-size silhouette</text>
+  </g>
+
+  <g transform="translate(80 430)">
+    <rect width="1280" height="200" fill="#FFFFFF" stroke="#050505"/>
+    <g transform="translate(34 24) scale(.82)">
+      <path fill="#050505" d="M0 152 52 0h38L42 152z"/>
+      <path fill="#050505" d="m152 152-52-152H62l48 152z"/>
+      <rect x="39" y="88" width="74" height="24" rx="12" fill="#548CFF"/>
+      <circle cx="39" cy="100" r="12" fill="#050505"/>
+      <circle cx="113" cy="100" r="12" fill="#050505"/>
+    </g>
+    <text x="210" y="84" fill="#050505" font-family="Geist, Inter, Arial, sans-serif" font-size="46" font-weight="800">B · Relay A</text>
+    <text x="210" y="126" fill="#666666" font-family="Geist, Inter, Arial, sans-serif" font-size="18">Lettermark · an A formed by two peers joined by a trusted relay</text>
+  </g>
+
+  <g transform="translate(80 670)">
+    <rect width="1280" height="200" fill="#F5F6F8" stroke="#050505"/>
+    <g transform="translate(34 24) scale(.82)">
+      <path fill="#050505" d="M0 76C0 34 34 0 76 0h40v32H76c-24 0-44 20-44 44s20 44 44 44h16v32H76C34 152 0 118 0 76Z"/>
+      <path fill="#548CFF" d="M152 76c0 42-34 76-76 76H36v-32h40c24 0 44-20 44-44S100 32 76 32H60V0h16c42 0 76 34 76 76Z"/>
+      <rect x="60" y="60" width="32" height="32" rx="16" fill="#FFFFFF"/>
+      <rect x="70" y="70" width="12" height="12" rx="6" fill="#050505"/>
+    </g>
+    <text x="210" y="84" fill="#050505" font-family="Geist, Inter, Arial, sans-serif" font-size="46" font-weight="800">C · Near Loop</text>
+    <text x="210" y="126" fill="#666666" font-family="Geist, Inter, Arial, sans-serif" font-size="18">Minimal symbol · two surfaces complete one continuous local exchange</text>
+  </g>
+</svg>

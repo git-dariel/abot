@@ -2,7 +2,6 @@ package app.abot.android
 
 import android.Manifest
 import android.content.Context
-import android.net.Uri
 import android.content.Intent
 import android.content.BroadcastReceiver
 import android.content.IntentFilter
@@ -111,6 +110,11 @@ class MainActivity : ComponentActivity() {
         super.onStop()
     }
 
+    override fun onDestroy() {
+        if (isFinishing) TrustedReceiverService.disableDiscovery(this)
+        super.onDestroy()
+    }
+
     private fun Intent.receiveTransferId(): String? =
         takeIf { action == ACTION_SHOW_RECEIVE }?.getStringExtra(TrustedReceiverService.EXTRA_TRANSFER_ID)
 }
@@ -126,7 +130,7 @@ private fun AbotApp(
     val context = LocalContext.current
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val trustedDevices = remember { TrustedDeviceStore(context) }
-    var selectedUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var selectedDocuments by remember { mutableStateOf<List<SelectedDocument>>(emptyList()) }
     var galleryOpen by rememberSaveable { mutableStateOf(false) }
     var galleryRefreshKey by rememberSaveable { mutableIntStateOf(0) }
     var activeSection by rememberSaveable { mutableStateOf(AbotMobileSection.HOME) }
@@ -147,7 +151,7 @@ private fun AbotApp(
     }
     var transferState by remember { mutableStateOf(TransferState.IDLE) }
     var statusMessage by rememberSaveable {
-        mutableStateOf(if (trustedReconnectReady) "Finding your trusted PC..." else "Scan once to pair this phone.")
+        mutableStateOf(if (trustedReconnectReady) "Windows receiver discovery is off." else "Scan once to pair this phone.")
     }
     var progress by remember { mutableFloatStateOf(0f) }
     var reverseOffer by remember { mutableStateOf<ReverseOffer?>(null) }
@@ -174,22 +178,15 @@ private fun AbotApp(
         if (transferState == TransferState.FAILED) transferState = TransferState.IDLE
     }
 
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            selectedUri = uri
-            transferState = TransferState.FILE_SELECTED
-            statusMessage = "File selected. Pair with Windows, then offer the file."
-            progress = 0f
-        }
-    }
     val galleryPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         hasPhotoAccess = hasGalleryPhotoAccess(context)
+        galleryRefreshKey += 1
         if (!hasPhotoAccess) statusMessage = "Photo access is required to show ABOT Gallery."
     }
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        TrustedReceiverService.start(context)
+        TrustedReceiverService.enableDiscovery(context)
         if (!granted) {
-            statusMessage = "Background receiver is active, but open ABOT to see incoming files because notifications are disabled."
+            statusMessage = "Discovery is on for this session, but Android may hide incoming-file alerts because notifications are disabled."
         }
     }
     val scanner = rememberLauncherForActivityResult(ScanContract()) { result ->
@@ -227,7 +224,7 @@ private fun AbotApp(
     }
 
     fun reconnectTrustedPc() {
-        if (!trustedReconnectReady) return
+        if (!trustedReconnectReady || !TrustedReceiverService.isDiscoveryEnabled()) return
         verifiedPairingLink = null
         pairingTrusted = false
         pairingFromService = false
@@ -235,10 +232,20 @@ private fun AbotApp(
         TrustedReceiverService.reconnect(context)
     }
 
-    fun sendFile() {
+    fun sendFiles() {
         if (isBusy) return
-        val document = selectedUri ?: return
-        val trustedPairing = verifiedPairing?.takeIf { pairingTrusted } ?: return
+        val documents = selectedDocuments
+        if (documents.isEmpty()) return
+        val trustedPairing = verifiedPairing?.takeIf { pairingTrusted } ?: run {
+            transferState = TransferState.FAILED
+            statusMessage = "Turn on Windows Receiver Discovery or scan the PC QR before sending."
+            return
+        }
+        if (documents.size > 1 && trustedPairing.reconnectProofHex == null) {
+            transferState = TransferState.FAILED
+            statusMessage = "Send one file first to finish trusted pairing, then turn on receiver discovery for batch transfers."
+            return
+        }
         if (
             !trustedPairing.isLegacy &&
             trustedPairing.reconnectProofHex == null &&
@@ -248,85 +255,67 @@ private fun AbotApp(
             return
         }
         transferState = TransferState.TRANSFER_OFFERED
-        statusMessage = "Hashing the file and preparing an encrypted offer..."
+        statusMessage = "Preparing ${documents.size} encrypted ${if (documents.size == 1) "offer" else "offers"}..."
         progress = 0f
         Thread {
-            try {
+            val totalBytes = documents.sumOf(SelectedDocument::size).coerceAtLeast(1)
+            var completedBytes = 0L
+            val completed = mutableListOf<String>()
+            val failed = mutableListOf<SelectedDocument>()
+            documents.forEachIndexed { index, document ->
                 val pairing = TrustedReconnectProtocol.prepareQrTransfer(trustedPairing, trustedDevices)
-                val result = EncryptedTransferClient.send(
-                    resolver = context.contentResolver,
-                    document = document,
-                    pairing = pairing,
-                    onOfferSent = {
-                        updateState(
-                            TransferState.AWAITING_REMOTE_CONFIRMATION,
-                            "Offer reached Windows. Hold a fist at the PC camera, then open your palm. No file bytes have been sent yet.",
-                        )
-                        mainHandler.post {
-                            Toast.makeText(
-                                context,
-                                "Windows is ready: hold a fist at the PC, then open your palm.",
-                                Toast.LENGTH_LONG,
-                            ).show()
-                        }
-                    },
-                    onAccepted = {
-                        updateState(TransferState.ACCEPTED, "Accepted. Starting encrypted upload...")
-                    },
-                    onProgress = { sent, total ->
-                        val value = if (total == 0L) 1f else (sent.toDouble() / total).toFloat()
-                        updateState(
-                            TransferState.TRANSFERRING,
-                            "Sending ${formatBytes(sent)} of ${formatBytes(total)}...",
-                            value,
-                        )
-                    },
-                )
-                if (pairing.reconnectSecretHex != null && result.reconnectProvisioned) {
-                    trustedDevices.markReconnectProvisioned(pairing)
-                    mainHandler.post { trustedReconnectReady = true }
-                }
-                updateState(
-                    TransferState.COMPLETED,
-                    "${result.fileName} was received, verified, and saved on Windows.",
-                    1f,
-                )
-                mainHandler.post { recentActivity = "Sent ${result.fileName} to Windows" }
-                mainHandler.postDelayed({
-                    selectedUri = null
-                    transferState = TransferState.IDLE
-                    if (pairing.reconnectProofHex == null && result.reconnectProvisioned) {
-                        verifiedPairingLink = null
-                        pairingTrusted = false
-                        pairingFromService = false
-                        TrustedReceiverService.start(context)
-                        statusMessage = "Ready for another photo. Reconnecting with your trusted PC..."
-                    } else {
-                        statusMessage = "Ready for another photo. Your trusted PC stays connected."
+                try {
+                    val result = EncryptedTransferClient.send(
+                        resolver = context.contentResolver,
+                        document = document.uri,
+                        pairing = pairing,
+                        onOfferSent = {
+                            updateState(
+                                TransferState.AWAITING_REMOTE_CONFIRMATION,
+                                "${index + 1} of ${documents.size}: ${document.name} is waiting for Windows acceptance. No bytes have moved yet.",
+                            )
+                            mainHandler.post {
+                                Toast.makeText(context, "Accept ${document.name} on Windows.", Toast.LENGTH_LONG).show()
+                            }
+                        },
+                        onAccepted = {
+                            updateState(TransferState.ACCEPTED, "${index + 1} of ${documents.size} accepted. Starting encrypted upload...")
+                        },
+                        onProgress = { sent, total ->
+                            updateState(
+                                TransferState.TRANSFERRING,
+                                "${index + 1} of ${documents.size}: sending ${document.name} · ${formatBytes(sent)} of ${formatBytes(total)}",
+                                aggregateBatchProgress(completedBytes, sent, totalBytes),
+                            )
+                        },
+                    )
+                    if (pairing.reconnectSecretHex != null && result.reconnectProvisioned) {
+                        trustedDevices.markReconnectProvisioned(pairing)
+                        mainHandler.post { trustedReconnectReady = true }
                     }
-                }, 1_500)
-            } catch (error: Exception) {
-                val detail = when (error) {
-                    is IllegalArgumentException, is IllegalStateException -> error.message
-                    else -> null
+                    completed += result.fileName
+                    completedBytes += document.size
+                } catch (error: Exception) {
+                    failed += document
                 }
-                if (
-                    error.message?.contains("Connection refused", ignoreCase = true) == true ||
-                    error.message?.contains("reset", ignoreCase = true) == true
-                ) {
-                    mainHandler.post {
-                        verifiedPairingLink = null
-                        pairingTrusted = false
-                        pairingFromService = false
-                        TrustedReceiverService.reconnect(context)
+            }
+            mainHandler.post {
+                selectedDocuments = failed
+                progress = if (failed.isEmpty()) 1f else (completedBytes.toDouble() / totalBytes).toFloat().coerceIn(0f, 1f)
+                if (completed.isNotEmpty()) recentActivity = "Sent ${completed.size} file${if (completed.size == 1) "" else "s"} to Windows"
+                when {
+                    failed.isEmpty() -> {
+                        transferState = TransferState.COMPLETED
+                        statusMessage = "${completed.size} file${if (completed.size == 1) "" else "s"} received and verified on Windows."
                     }
-                }
-                updateState(
-                    TransferState.FAILED,
-                    detail ?: "Transfer failed. Confirm both devices are on the same local network and try again.",
-                )
-                mainHandler.post {
-                    Toast.makeText(context, detail ?: "Could not reach Windows.", Toast.LENGTH_LONG).show()
+                    completed.isEmpty() -> {
+                        transferState = TransferState.FAILED
+                        statusMessage = "No files were sent. Check the Windows receiver and try selecting the files again."
+                    }
+                    else -> {
+                        transferState = TransferState.FAILED
+                        statusMessage = "${completed.size} sent; ${failed.size} failed: ${failed.joinToString { it.name }}"
+                    }
                 }
             }
         }.start()
@@ -334,8 +323,8 @@ private fun AbotApp(
 
     val gestureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            Toast.makeText(context, "Photo grabbed. Preparing the Windows offer...", Toast.LENGTH_SHORT).show()
-            sendFile()
+            Toast.makeText(context, "Selection grabbed. Preparing Windows offers...", Toast.LENGTH_SHORT).show()
+            sendFiles()
         }
     }
     val receiveGestureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -348,16 +337,31 @@ private fun AbotApp(
         }
     }
 
-    fun openGestureFor(document: Uri) {
+    fun openGestureFor(documents: List<SelectedDocument>) {
         if (isBusy) return
-        selectedUri = document
+        if (documents.isEmpty()) return
+        selectedDocuments = documents
         transferState = TransferState.FILE_SELECTED
-        statusMessage = "Photo ready. Hold an open palm, then close your fist to offer it."
+        statusMessage = "${documents.size} item${if (documents.size == 1) "" else "s"} ready. Hold an open palm, then close your fist."
         progress = 0f
         gestureLauncher.launch(
             Intent(context, GestureCaptureActivity::class.java)
-                .putExtra(GestureCaptureActivity.EXTRA_MEDIA_URI, document.toString()),
+                .putStringArrayListExtra(GestureCaptureActivity.EXTRA_MEDIA_URIS, ArrayList(documents.map { it.uri.toString() }))
+                .putStringArrayListExtra(GestureCaptureActivity.EXTRA_MEDIA_NAMES, ArrayList(documents.map(SelectedDocument::name)))
+                .putExtra(GestureCaptureActivity.EXTRA_MEDIA_SIZES, documents.map(SelectedDocument::size).toLongArray())
+                .putStringArrayListExtra(GestureCaptureActivity.EXTRA_MEDIA_TYPES, ArrayList(documents.map(SelectedDocument::mimeType))),
         )
+    }
+
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        uris.forEach { uri ->
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+        }
+        val documents = SelectedDocumentReader.read(context.contentResolver, uris)
+        if (documents.isNotEmpty()) openGestureFor(documents)
     }
 
     val receiverReady = verifiedPairing != null && pairingTrusted
@@ -382,18 +386,6 @@ private fun AbotApp(
                 pairingFromService = false
             }
             if (verifiedPairingLink == null) statusMessage = trustedConnection.message
-        }
-    }
-    LaunchedEffect(trustedReconnectReady) {
-        if (trustedReconnectReady) {
-            if (
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-            ) {
-                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-            } else {
-                TrustedReceiverService.start(context)
-            }
         }
     }
     LaunchedEffect(requestedReceiveId, isBusy) {
@@ -434,7 +426,10 @@ private fun AbotApp(
                     refreshKey = galleryRefreshKey,
                     onBack = { galleryOpen = false },
                     onRequestAccess = { galleryPermission.launch(galleryPermissions()) },
-                    onOpenPhoto = ::openGestureFor,
+                    onConfirmSelection = { documents ->
+                        galleryOpen = false
+                        openGestureFor(documents)
+                    },
                 )
             }
         }
@@ -449,7 +444,8 @@ private fun AbotApp(
                 trustedReconnectReady = trustedReconnectReady,
                 transferState = transferState,
                 progress = progress,
-                selectedFile = selectedUri != null,
+                selectedFiles = selectedDocuments,
+                discoveryEnabled = trustedConnection.discoveryEnabled,
                 verifiedPairing = verifiedPairing,
                 pairingTrusted = pairingTrusted,
                 reverseOffer = reverseOffer,
@@ -468,9 +464,10 @@ private fun AbotApp(
                 )
             },
             onOpenGallery = {
-                if (!receiverReady && trustedReconnectReady) reconnectTrustedPc()
                 galleryRefreshKey += 1
                 galleryOpen = true
+                val missingPermissions = missingGalleryPermissions(context)
+                if (missingPermissions.isNotEmpty()) galleryPermission.launch(missingPermissions)
             },
             onTrustPairing = { pairing ->
                 trustedDevices.trust(pairing)
@@ -495,8 +492,29 @@ private fun AbotApp(
                 statusMessage = "Windows transfer declined."
             },
             onChooseFile = { picker.launch(arrayOf("*/*")) },
-            onGrabSelectedFile = { selectedUri?.let(::openGestureFor) },
+            onRetrySelectedFiles = { openGestureFor(selectedDocuments) },
             onReconnect = ::reconnectTrustedPc,
+            onDiscoveryToggle = { enabled ->
+                if (!enabled) {
+                    TrustedReceiverService.disableDiscovery(context)
+                    if (pairingFromService) {
+                        verifiedPairingLink = null
+                        pairingTrusted = false
+                        pairingFromService = false
+                    }
+                    statusMessage = "Windows receiver discovery is off."
+                } else if (!trustedReconnectReady) {
+                    statusMessage = "Complete one QR-approved transfer before enabling trusted receiver discovery."
+                } else if (
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    TrustedReceiverService.enableDiscovery(context)
+                    statusMessage = "Finding your trusted PC..."
+                }
+            },
             onToggleManualPairing = { showManualLink = !showManualLink },
             onPairingLinkChange = { pairingLink = it },
             onVerifyPairingLink = ::verifyPairingLink,
@@ -519,12 +537,27 @@ private fun formatBytes(bytes: Long): String {
 private fun galleryPermissions(): Array<String> = when {
     Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> arrayOf(
         Manifest.permission.READ_MEDIA_IMAGES,
+        Manifest.permission.READ_MEDIA_VIDEO,
         Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
     )
-    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> arrayOf(Manifest.permission.READ_MEDIA_IMAGES)
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU -> arrayOf(
+        Manifest.permission.READ_MEDIA_IMAGES,
+        Manifest.permission.READ_MEDIA_VIDEO,
+    )
     else -> arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
 }
 
 private fun hasGalleryPhotoAccess(context: Context): Boolean = galleryPermissions().any { permission ->
     ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+}
+
+private fun missingGalleryPermissions(context: Context): Array<String> {
+    if (
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+        ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED
+    ) return emptyArray()
+    return galleryPermissions()
+        .filterNot { it == Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED }
+        .filter { ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED }
+        .toTypedArray()
 }

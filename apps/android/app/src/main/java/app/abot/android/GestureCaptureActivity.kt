@@ -35,6 +35,10 @@ import java.util.concurrent.Executors
 class GestureCaptureActivity : ComponentActivity() {
     companion object {
         const val EXTRA_MEDIA_URI = "app.abot.android.extra.MEDIA_URI"
+        const val EXTRA_MEDIA_URIS = "app.abot.android.extra.MEDIA_URIS"
+        const val EXTRA_MEDIA_NAMES = "app.abot.android.extra.MEDIA_NAMES"
+        const val EXTRA_MEDIA_SIZES = "app.abot.android.extra.MEDIA_SIZES"
+        const val EXTRA_MEDIA_TYPES = "app.abot.android.extra.MEDIA_TYPES"
         private const val TAG = "ABOT-Gesture"
     }
 
@@ -55,15 +59,39 @@ class GestureCaptureActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         previewView = PreviewView(this)
-        val mediaUri = intent.getStringExtra(EXTRA_MEDIA_URI)?.let(Uri::parse)
+        val mediaUris = intent.getStringArrayListExtra(EXTRA_MEDIA_URIS)
+            ?.map(Uri::parse)
+            ?.takeIf(List<Uri>::isNotEmpty)
+            ?: listOfNotNull(intent.getStringExtra(EXTRA_MEDIA_URI)?.let(Uri::parse))
+        val mediaNames = intent.getStringArrayListExtra(EXTRA_MEDIA_NAMES).orEmpty()
+        val mediaSizes = intent.getLongArrayExtra(EXTRA_MEDIA_SIZES) ?: longArrayOf()
+        val mediaTypes = intent.getStringArrayListExtra(EXTRA_MEDIA_TYPES).orEmpty()
+        val previewUri = mediaUris.firstOrNull()
+        val previewIsVisual = mediaTypes.firstOrNull()?.let { it.startsWith("image/") || it.startsWith("video/") } == true
+        val itemCount = mediaUris.size.coerceAtLeast(1)
         setContent {
             AbotTheme {
                 Surface(Modifier.fillMaxSize(), color = AbotPaper) {
                     Column(Modifier.systemBarsPadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         AbotSectionLabel("Send gesture")
-                        Text("Grab this photo.", style = MaterialTheme.typography.headlineLarge)
+                        Text(if (itemCount == 1) "Grab this file." else "Grab $itemCount files.", style = MaterialTheme.typography.headlineLarge)
                         Text("Open palm → closed fist", color = AbotBlue, style = MaterialTheme.typography.titleLarge)
                         Text("The gesture prepares an offer. Windows still confirms before any bytes move.", color = AbotMuted, style = MaterialTheme.typography.bodySmall)
+                        if (mediaNames.isNotEmpty()) {
+                            Surface(color = AbotSoft, modifier = Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    mediaNames.take(3).forEachIndexed { index, name ->
+                                        val size = mediaSizes.getOrNull(index) ?: 0L
+                                        Text(
+                                            "${index + 1}. $name · ${formatAbotBytes(size)}",
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                    if (mediaNames.size > 3) Text("+${mediaNames.size - 3} more", color = AbotMuted)
+                                }
+                            }
+                        }
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -71,14 +99,19 @@ class GestureCaptureActivity : ComponentActivity() {
                                 .background(AbotInk),
                             contentAlignment = Alignment.Center,
                         ) {
-                            if (mediaUri != null) {
+                            if (previewUri != null && previewIsVisual) {
                                 MediaStoreImage(
-                                    uri = mediaUri,
+                                    uri = previewUri,
                                     requestedSize = 1600,
                                     contentScale = ContentScale.Fit,
                                     modifier = Modifier.fillMaxSize(),
-                                    contentDescription = "Photo ready to offer",
+                                    contentDescription = "Selected media ready to offer",
                                 )
+                            } else {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(itemCount.toString().padStart(2, '0'), color = AbotBlue, style = MaterialTheme.typography.displayLarge)
+                                    Text(mediaNames.firstOrNull() ?: "Selected file", color = AbotPaper, maxLines = 2)
+                                }
                             }
                             Surface(
                                 modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp).size(width = 150.dp, height = 200.dp),

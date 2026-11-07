@@ -65,12 +65,13 @@ These commands validate components, not the complete end-to-end acceptance crite
 
 1. Launch the native Windows app and select **Start receiving to Downloads**. Windows resolves your actual Downloads folder automatically.
 2. Tap **Scan QR** in Android, scan the Windows QR, and verify that both screens show the same six-digit code. The manual signed link remains available under the Windows disclosure.
-3. Approve the matching code on both devices, then select one Android document and offer it to Windows.
-4. Review the name, size, and SHA-256 on Windows, then accept or reject it. File bytes do not leave Android until acceptance.
+3. Approve the matching code on both devices, then select one Android document and offer it to Windows. This first accepted transfer provisions trusted reconnect.
+4. For later sessions, enable **Windows Receiver Discovery** in Android Settings. It is OFF on every fresh launch and never restarts silently.
+5. Use **Open ABOT Gallery** for mixed photo/video selection or **Choose Any File** for mixed document types. Confirm the selection, perform the Grab gesture once, then review and accept each queued offer on Windows. File bytes do not leave Android until that file's offer is accepted.
 
-After one successful QR transfer, start a fresh Windows receiver and use **Find trusted PC** on Android. Discovery is only a transport hint: Android still verifies the signed invitation and matches the stored Windows identity before reconnecting.
+After one successful QR transfer, start a fresh Windows receiver and turn on **Windows Receiver Discovery** in Android Settings. Discovery is session-only and can be stopped immediately with the same switch. It is only a transport hint: Android still verifies the signed invitation and matches the stored Windows identity before reconnecting.
 
-Optional gesture controls: after choosing a file and pairing, tap **Grab with hand gesture** on Android. Hold one open palm for about a second, then a fist to offer the file. On Windows, review the incoming file and enable **release gesture to accept**; hold a fist, then open your palm. Both cameras process frames locally using the bundled MediaPipe model. Buttons remain available. Gesture recognition is implemented but real-camera transfer acceptance testing remains pending; see [gesture testing](docs/testing/gestures.md).
+Optional gesture controls: selecting files automatically opens the Grab page. Hold one open palm, then a fist to arm the selected batch. On Windows, review each incoming file and use fist-to-open-palm acceptance. Both cameras process frames locally using the bundled MediaPipe model. Gesture recognition is implemented, but a recorded multi-file real-camera transfer remains pending; see [gesture testing](docs/testing/gestures.md).
 
 Windows Firewall may ask for private-network access. Do not enable public-network access. The invitation expires after five minutes and a fresh receiver session is required for each file.
 

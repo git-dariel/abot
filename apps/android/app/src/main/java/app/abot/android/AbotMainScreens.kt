@@ -27,6 +27,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -49,7 +50,8 @@ internal data class AbotMainUiState(
     val trustedReconnectReady: Boolean,
     val transferState: TransferState,
     val progress: Float,
-    val selectedFile: Boolean,
+    val selectedFiles: List<SelectedDocument>,
+    val discoveryEnabled: Boolean,
     val verifiedPairing: VerifiedPairing?,
     val pairingTrusted: Boolean,
     val reverseOffer: ReverseOffer?,
@@ -70,8 +72,9 @@ internal fun AbotMainShell(
     onReceiveWithoutGesture: (ReverseOffer) -> Unit,
     onDecline: (ReverseOffer) -> Unit,
     onChooseFile: () -> Unit,
-    onGrabSelectedFile: () -> Unit,
+    onRetrySelectedFiles: () -> Unit,
     onReconnect: () -> Unit,
+    onDiscoveryToggle: (Boolean) -> Unit,
     onToggleManualPairing: () -> Unit,
     onPairingLinkChange: (String) -> Unit,
     onVerifyPairingLink: () -> Unit,
@@ -98,7 +101,7 @@ internal fun AbotMainShell(
                     onReceiveWithoutGesture = onReceiveWithoutGesture,
                     onDecline = onDecline,
                     onChooseFile = onChooseFile,
-                    onGrabSelectedFile = onGrabSelectedFile,
+                    onRetrySelectedFiles = onRetrySelectedFiles,
                     modifier = Modifier.padding(padding),
                 )
                 AbotMobileSection.ACTIVITY -> AbotActivityScreen(state, Modifier.padding(padding))
@@ -107,6 +110,7 @@ internal fun AbotMainShell(
                     pairingLink = pairingLink,
                     showManualPairing = showManualPairing,
                     onReconnect = onReconnect,
+                    onDiscoveryToggle = onDiscoveryToggle,
                     onChooseFile = onChooseFile,
                     onToggleManualPairing = onToggleManualPairing,
                     onPairingLinkChange = onPairingLinkChange,
@@ -185,7 +189,7 @@ private fun AbotHomeScreen(
     onReceiveWithoutGesture: (ReverseOffer) -> Unit,
     onDecline: (ReverseOffer) -> Unit,
     onChooseFile: () -> Unit,
-    onGrabSelectedFile: () -> Unit,
+    onRetrySelectedFiles: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -253,10 +257,25 @@ private fun AbotHomeScreen(
                     modifier = Modifier.fillMaxWidth().height(54.dp),
                     colors = abotPrimaryButtonColors(),
                     shape = RoundedCornerShape(2.dp),
-                ) { Text(if (state.receiverReady) "Open ABOT Gallery" else "Open gallery while reconnecting") }
-                OutlinedButton(onClick = onChooseFile, enabled = !state.isBusy, modifier = Modifier.fillMaxWidth(), border = BorderStroke(1.dp, AbotInk), shape = RoundedCornerShape(2.dp)) { Text("Choose any file") }
-                if (state.selectedFile) {
-                    Button(onClick = onGrabSelectedFile, enabled = state.receiverReady && !state.isBusy, modifier = Modifier.fillMaxWidth(), colors = abotBlueButtonColors(), shape = RoundedCornerShape(2.dp)) { Text("Grab selected file") }
+                ) { Text("Open ABOT Gallery") }
+                OutlinedButton(onClick = onChooseFile, enabled = !state.isBusy, modifier = Modifier.fillMaxWidth(), border = BorderStroke(1.dp, AbotInk), shape = RoundedCornerShape(2.dp)) { Text("Choose Any File") }
+                if (state.selectedFiles.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("${state.selectedFiles.size} item${if (state.selectedFiles.size == 1) "" else "s"} selected", fontWeight = FontWeight.Bold)
+                        state.selectedFiles.take(3).forEach { item ->
+                            Text("${item.name} · ${formatAbotBytes(item.size)}", color = AbotMuted, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        if (state.selectedFiles.size > 3) Text("+${state.selectedFiles.size - 3} more", color = AbotMuted, style = MaterialTheme.typography.bodySmall)
+                        if (state.transferState == TransferState.FAILED) {
+                            Button(
+                                onClick = onRetrySelectedFiles,
+                                enabled = state.receiverReady && !state.isBusy,
+                                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                                colors = abotBlueButtonColors(),
+                                shape = RoundedCornerShape(2.dp),
+                            ) { Text("Retry failed files") }
+                        }
+                    }
                 }
             }
         }
@@ -281,6 +300,7 @@ private fun AbotConnectionStrip(state: AbotMainUiState) {
                     when {
                         state.receiverReady -> "Trusted PC connected"
                         state.isDiscovering -> "Finding your trusted PC"
+                        !state.discoveryEnabled && state.trustedReconnectReady -> "Receiver discovery is off"
                         state.trustedReconnectReady -> "PC temporarily unavailable"
                         else -> "Pair a PC to begin"
                     },
@@ -340,6 +360,7 @@ private fun AbotSettingsScreen(
     pairingLink: String,
     showManualPairing: Boolean,
     onReconnect: () -> Unit,
+    onDiscoveryToggle: (Boolean) -> Unit,
     onChooseFile: () -> Unit,
     onToggleManualPairing: () -> Unit,
     onPairingLinkChange: (String) -> Unit,
@@ -352,20 +373,37 @@ private fun AbotSettingsScreen(
     ) {
         AbotSectionLabel("Device & privacy")
         Text("Settings.", style = MaterialTheme.typography.displayLarge)
+        Surface(border = BorderStroke(1.dp, AbotInk), color = AbotPaper) {
+            Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Windows Receiver Discovery", fontWeight = FontWeight.Bold)
+                    Text(
+                        if (state.discoveryEnabled) "On for this app session" else "Off — no scanning or receiver notification",
+                        color = AbotMuted,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Switch(
+                    checked = state.discoveryEnabled,
+                    onCheckedChange = onDiscoveryToggle,
+                    enabled = !state.isBusy,
+                )
+            }
+        }
         Column {
             AbotSettingRow("Connection", if (state.receiverReady) "Trusted PC connected" else "Not connected")
             AbotSettingRow("Incoming files", "Downloads/ABOT")
             AbotSettingRow("Gesture camera", "Processed on this phone")
-            AbotSettingRow("Background readiness", if (state.trustedReconnectReady) "Enabled after app launch" else "Pairing required")
+            AbotSettingRow("Background readiness", if (state.discoveryEnabled) "Enabled by you" else "Inactive")
         }
-        Button(onClick = onReconnect, enabled = state.trustedReconnectReady && !state.isDiscovering && !state.isBusy, modifier = Modifier.fillMaxWidth(), colors = abotBlueButtonColors(), shape = RoundedCornerShape(2.dp)) { Text("Reconnect trusted PC") }
+        Button(onClick = onReconnect, enabled = state.discoveryEnabled && state.trustedReconnectReady && !state.isDiscovering && !state.isBusy, modifier = Modifier.fillMaxWidth(), colors = abotBlueButtonColors(), shape = RoundedCornerShape(2.dp)) { Text("Find trusted PC now") }
         OutlinedButton(onClick = onChooseFile, enabled = !state.isBusy, modifier = Modifier.fillMaxWidth(), border = BorderStroke(1.dp, AbotInk), shape = RoundedCornerShape(2.dp)) { Text("Choose another file type") }
         TextButton(onClick = onToggleManualPairing, modifier = Modifier.fillMaxWidth()) { Text(if (showManualPairing) "Hide manual pairing" else "Use manual pairing link", color = AbotInk) }
         if (showManualPairing) {
             OutlinedTextField(value = pairingLink, onValueChange = onPairingLinkChange, label = { Text("Pairing link") }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(2.dp))
             Button(onClick = onVerifyPairingLink, modifier = Modifier.fillMaxWidth(), colors = abotPrimaryButtonColors(), shape = RoundedCornerShape(2.dp)) { Text("Verify link") }
         }
-        Text("ABOT does not require an account or cloud service. Discovery is only a hint; your approved device identity establishes trust.", color = AbotMuted, style = MaterialTheme.typography.bodySmall)
+        Text("ABOT does not require an account or cloud service. Discovery starts only when you turn it on, and your approved device identity—not discovery—establishes trust.", color = AbotMuted, style = MaterialTheme.typography.bodySmall)
     }
 }
 

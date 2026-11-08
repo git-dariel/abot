@@ -2,6 +2,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect, useRef, useState } from "react";
 import { GestureAccept } from "./GestureAccept";
+import { TransferArtwork } from "./TransferArtwork";
 import abotMark from "./assets/abot-mark.svg";
 
 type IncomingOffer = { transferId: string; fileId: string; name: string; size: number; sha256: string };
@@ -23,6 +24,12 @@ const formatBytes = (bytes: number) => {
   const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   return `${(bytes / 1024 ** unit).toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 };
+
+function NavIcon({ view }: { view: AppView }) {
+  if (view === "overview") return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8v10H3Z" /><path d="M9 21v-6h6v6" /></svg>;
+  if (view === "activity") return <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="4" /><path d="M7 9h10M7 14h7" /></svg>;
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7" /><circle cx="12" cy="12" r="2.5" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /></svg>;
+}
 
 export function App() {
   const receiverAutoStarted = useRef(false);
@@ -140,49 +147,63 @@ export function App() {
 
   return <div className="app-frame">
     <aside className="sidebar" aria-label="Primary navigation">
-      <button className="brand" type="button" onClick={() => setActiveView("overview")} aria-label="ABOT overview"><img src={abotMark} alt="" /><span>abot.</span></button>
-      <nav>{(["overview", "activity", "settings"] as const).map(view => <button type="button" key={view} className={`nav-item${activeView === view ? " active" : ""}`} onClick={() => setActiveView(view)}><span aria-hidden="true">{view === "overview" ? "01" : view === "activity" ? "02" : "03"}</span>{view[0].toUpperCase() + view.slice(1)}</button>)}</nav>
-      <div className="sidebar-note"><span className="privacy-mark" aria-hidden="true" />Local by design<small>Files and camera frames stay on your devices.</small></div>
+      <button className="brand" type="button" onClick={() => setActiveView("overview")} aria-label="ABOT overview"><img src={abotMark} alt="" /><span>abot</span></button>
+      <nav>{(["overview", "activity", "settings"] as const).map(view => <button type="button" key={view} className={`nav-item${activeView === view ? " active" : ""}`} onClick={() => setActiveView(view)}><NavIcon view={view} /><span>{view[0].toUpperCase() + view.slice(1)}</span></button>)}</nav>
+      <div className="privacy-note"><span className="privacy-dot" aria-hidden="true" /><div><strong>Local by design</strong><small>Files and camera frames stay on your devices.</small></div></div>
     </aside>
 
     <main className="workspace">
-      <header className="topbar"><button className="mobile-brand" type="button" onClick={() => setActiveView("overview")} aria-label="ABOT overview"><img src={abotMark} alt="" /><span>abot.</span></button><p>{activeView}</p><span className={`connection-pill ${receiverTone}`}><i aria-hidden="true" />{receiverLabel}</span></header>
+      <header className="topbar">
+        <button className="mobile-brand" type="button" onClick={() => setActiveView("overview")} aria-label="ABOT overview"><img src={abotMark} alt="" /><span>abot</span></button>
+        <div className="topbar-title"><span>{activeView}</span><strong>{activeView === "overview" ? "Your private relay" : activeView === "activity" ? "Transfer history" : "Device controls"}</strong></div>
+        <span className={`connection-pill ${receiverTone}`}><i aria-hidden="true" />{receiverLabel}</span>
+      </header>
 
-      {activeView === "overview" && <>
-        <section className="page-heading"><p className="eyebrow">PRIVATE. LOCAL. IMMEDIATE.</p><h1>Move files.<br /><em>Not friction.</em></h1><p className="lede">Your trusted phone reconnects automatically. Drop a file to send, or leave ABOT ready to catch one.</p></section>
-        <section className="dashboard-grid">
-          <article className="panel receiver-panel" aria-labelledby="receive-heading" aria-live="polite">
-            <div className="panel-heading"><div><p className="eyebrow">RECEIVE</p><h2 id="receive-heading">From phone</h2></div><span className="panel-index">A</span></div>
-            <div className="panel-body receiver-state">
-              {receiver.state === "stopped" && <button type="button" onClick={startReceiver} disabled={!nativeShell || isStartingReceiver}>{isStartingReceiver ? "Starting..." : "Start receiver"}</button>}
-              {receiver.state === "waiting" && receiver.pairingUri && <><div className="signal-orbit" aria-hidden="true"><span /></div><strong>Listening on this PC</strong><p className="muted">Trusted phones can send now. Files save to Downloads.</p><button className="text-action" type="button" onClick={() => setShowPairing(true)}>Pair another phone <span>↗</span></button></>}
-              {receiver.state === "offerPending" && receiver.offer && <><span className="blue-tag">INCOMING FILE</span><strong>Ready to catch</strong><p className="incoming-name">{receiver.offer.name}</p><small>{formatBytes(receiver.offer.size)}</small><div className="decision-actions"><button type="button" onClick={() => void decideTransfer(true)} disabled={!receiver.pairingApproved}>Receive</button><button className="button-secondary" type="button" onClick={() => void decideTransfer(false)}>Decline</button></div>{!receiver.pairingApproved && <button className="button-secondary pairing-approval" type="button" onClick={() => void approvePairing()}>Confirm matching code</button>}{receiver.pairingApproved && <GestureAccept key={receiver.offer.transferId} onAccept={() => void decideTransfer(true, receiver.offer?.transferId)} />}</>}
-              {receiver.state === "receiving" && <><div className="progress-ring" /><strong>Receiving securely...</strong><p className="muted">Verifying size and SHA-256 before saving.</p></>}
-              {receiver.state === "rejected" && <strong>Declined. Getting ready again...</strong>}
-              {receiver.state === "completed" && <><div className="success-mark" aria-hidden="true">✓</div><strong>Received</strong><p className="muted">Verified and saved. Re-arming automatically...</p></>}
-              {(receiver.state === "starting" || receiver.state === "restarting") && <><div className="progress-ring" /><strong>Preparing receiver...</strong></>}
-              {receiver.state === "failed" && <><strong>Receiver needs attention</strong><p className="inline-error">{receiver.error}</p><button type="button" onClick={startReceiver}>Try again</button></>}
-              {!nativeShell && <p className="notice">Open this page in the native Windows app.</p>}{receiverError && <p className="inline-error" role="alert">{receiverError}</p>}
+      {activeView === "overview" && <div className="page overview-page">
+        <section className="page-heading">
+          <p className="eyebrow">PRIVATE · LOCAL · IMMEDIATE</p>
+          <h1>Move files,<br />right where you are.</h1>
+          <p>Drop a file for your phone, or keep this PC ready to catch one. Nothing moves until the receiving device accepts.</p>
+        </section>
+
+        <section className="feature-grid">
+          <article className={`feature-card send-card${dragActive ? " drag-active" : ""}`} aria-labelledby="send-heading">
+            <div className="feature-heading"><div><span className="card-kicker">SEND</span><h2 id="send-heading">To phone</h2></div><TransferArtwork className="card-art" /></div>
+            <div className="feature-content">
+              {!outgoing && <div className="center-state"><span className="drop-icon" aria-hidden="true">↓</span><strong>Drop one file here</strong><p>Or choose a file from this PC. Your phone still approves it.</p><button type="button" className="pill-button navy" onClick={() => void chooseOutgoing()}>Browse files</button></div>}
+              {outgoing && !outgoingArmed && <div className="selected-state"><span className="soft-pill">FILE SELECTED</span><strong className="file-name">{outgoing.name}</strong><small>{formatBytes(outgoing.size)}</small><GestureAccept key={outgoing.id} onAccept={() => void armOutgoing()} intro="File ready. Show an open palm, then close it into a fist to grab the file." armed="PALM LOCKED — close your hand to send this file." action="send this file" firstPose="Open_Palm" secondPose="Closed_Fist" /><div className="button-row"><button type="button" className="pill-button navy" onClick={() => void armOutgoing()}>Send without gesture</button><button type="button" className="pill-button ghost" onClick={() => void chooseOutgoing()}>Change file</button></div></div>}
+              {outgoing && outgoingArmed && <div className="center-state"><span className="success-icon" aria-hidden="true">✓</span><strong>Waiting for your phone</strong><p>Open ABOT on Android and approve {outgoing.name}.</p><button type="button" className="pill-button ghost" onClick={() => void chooseOutgoing()}>Change file</button></div>}
             </div>
           </article>
 
-          <article className={`panel send-panel${dragActive ? " drag-active" : ""}`} aria-labelledby="send-heading">
-            <div className="panel-heading"><div><p className="eyebrow">SEND</p><h2 id="send-heading">To phone</h2></div><span className="panel-index">B</span></div>
-            <div className="panel-body send-state">
-              {!outgoing && <><div className="drop-glyph" aria-hidden="true">↓</div><strong>Drop one file here</strong><p className="muted">Or choose a file from this PC. Nothing leaves until your phone accepts.</p><button type="button" className="button-secondary compact" onClick={() => void chooseOutgoing()}>Browse files</button></>}
-              {outgoing && !outgoingArmed && <><span className="blue-tag">FILE SELECTED</span><strong className="file-name">{outgoing.name}</strong><small>{formatBytes(outgoing.size)}</small><GestureAccept key={outgoing.id} onAccept={() => void armOutgoing()} intro="File ready. Show an open palm, then close it into a fist to grab the file." armed="PALM LOCKED — close your hand to send this file." action="send this file" firstPose="Open_Palm" secondPose="Closed_Fist" /><button type="button" onClick={() => void armOutgoing()}>Send without gesture</button><button type="button" className="button-secondary" onClick={() => void chooseOutgoing()}>Choose a different file</button></>}
-              {outgoing && outgoingArmed && <><div className="success-mark blue" aria-hidden="true">✓</div><strong>Waiting for your phone</strong><p className="muted">Keep ABOT open on Android and accept {outgoing.name} when it appears.</p><button type="button" className="button-secondary compact" onClick={() => void chooseOutgoing()}>Change file</button></>}
+          <article className="feature-card receive-card" aria-labelledby="receive-heading" aria-live="polite">
+            <div className="feature-heading"><div><span className="card-kicker">RECEIVE</span><h2 id="receive-heading">From phone</h2></div><TransferArtwork className="card-art" reversed /></div>
+            <div className="feature-content">
+              {receiver.state === "stopped" && <div className="center-state"><strong>Receiver is offline</strong><p>Start the local receiver when you are ready.</p><button type="button" className="pill-button sky" onClick={startReceiver} disabled={!nativeShell || isStartingReceiver}>{isStartingReceiver ? "Starting…" : "Start receiver"}</button></div>}
+              {receiver.state === "waiting" && receiver.pairingUri && <div className="center-state"><span className="signal-mark"><i /></span><strong>Ready to receive</strong><p>Trusted phones can send now. Verified files save to Downloads.</p><button className="text-action light" type="button" onClick={() => setShowPairing(true)}>Pair another phone <span>↗</span></button></div>}
+              {receiver.state === "offerPending" && receiver.offer && <div className="selected-state"><span className="sky-pill">INCOMING FILE</span><strong className="file-name">{receiver.offer.name}</strong><small>{formatBytes(receiver.offer.size)}</small><div className="button-row"><button type="button" className="pill-button sky" onClick={() => void decideTransfer(true)} disabled={!receiver.pairingApproved}>Receive</button><button className="pill-button dark-ghost" type="button" onClick={() => void decideTransfer(false)}>Decline</button></div>{!receiver.pairingApproved && <button className="pill-button dark-ghost" type="button" onClick={() => void approvePairing()}>Confirm matching code</button>}{receiver.pairingApproved && <GestureAccept key={receiver.offer.transferId} onAccept={() => void decideTransfer(true, receiver.offer?.transferId)} />}</div>}
+              {receiver.state === "receiving" && <div className="center-state"><span className="spinner" /><strong>Receiving securely…</strong><p>Verifying size and SHA-256 before saving.</p></div>}
+              {receiver.state === "rejected" && <div className="center-state"><strong>Transfer declined</strong><p>Preparing the receiver for another offer.</p></div>}
+              {receiver.state === "completed" && <div className="center-state"><span className="success-icon sky" aria-hidden="true">✓</span><strong>Received and verified</strong><p>Saved to Downloads. The receiver is re-arming.</p></div>}
+              {(receiver.state === "starting" || receiver.state === "restarting") && <div className="center-state"><span className="spinner" /><strong>Preparing receiver…</strong></div>}
+              {receiver.state === "failed" && <div className="center-state"><strong>Receiver needs attention</strong><p className="error-copy">{receiver.error}</p><button type="button" className="pill-button sky" onClick={startReceiver}>Try again</button></div>}
+              {!nativeShell && <p className="notice">Open this page in the native Windows app.</p>}{receiverError && <p className="error-copy" role="alert">{receiverError}</p>}
             </div>
           </article>
         </section>
-      </>}
 
-      {activeView === "activity" && <section className="secondary-page"><div className="page-heading compact-heading"><p className="eyebrow">TRANSFER LOG</p><h1>Activity.</h1></div><div className="activity-list">{receiver.lastCompleted ? <div className="activity-row"><span className="activity-icon">↓</span><div><strong>{receiver.lastCompleted.name}</strong><p>Received and verified</p></div><div className="activity-meta"><span>Downloads</span><small>Latest</small></div></div> : <div className="empty-state"><span>00</span><strong>No completed transfers yet.</strong><p>Your latest verified transfer will appear here.</p></div>}{outgoing && <div className="activity-row"><span className="activity-icon blue">↑</span><div><strong>{outgoing.name}</strong><p>{outgoingArmed ? "Waiting for phone" : "Selected on this PC"}</p></div><div className="activity-meta"><span>{formatBytes(outgoing.size)}</span><small>Current</small></div></div>}</div></section>}
+        <section className="recent-card">
+          <div className="section-heading"><div><span className="eyebrow">RECENT ITEM</span><h2>Latest transfer</h2></div><span className="session-label">THIS SESSION</span></div>
+          {receiver.lastCompleted ? <div className="recent-row"><span className="file-tile">✓</span><div><strong>{receiver.lastCompleted.name}</strong><p>Received and verified · Downloads</p></div><span>Latest</span></div> : <div className="empty-recent"><strong>No completed transfers yet</strong><p>Your latest verified file will appear here.</p></div>}
+        </section>
+      </div>}
 
-      {activeView === "settings" && <section className="secondary-page"><div className="page-heading compact-heading"><p className="eyebrow">DEVICE & PRIVACY</p><h1>Settings.</h1></div><div className="settings-list"><div className="setting-row"><div><strong>Receive folder</strong><p>Verified incoming files</p></div><span>Downloads</span></div><div className="setting-row"><div><strong>Connection</strong><p>Private local network only</p></div><span>{receiverLabel}</span></div><div className="setting-row"><div><strong>Camera processing</strong><p>Gesture frames never leave this PC</p></div><span>On device</span></div>{receiver.endpoint && <div className="setting-row"><div><strong>Local endpoint</strong><p>Current listening address</p></div><code>{receiver.endpoint}</code></div>}<button type="button" className="settings-action" onClick={() => setShowPairing(true)}>Pair another phone <span>↗</span></button></div></section>}
+      {activeView === "activity" && <div className="page secondary-page"><section className="page-heading compact"><p className="eyebrow">TRANSFER LOG</p><h1>Activity</h1><p>Verified transfers from this app session.</p></section><section className="recent-card">{receiver.lastCompleted ? <div className="recent-row"><span className="file-tile">↓</span><div><strong>{receiver.lastCompleted.name}</strong><p>Received and verified</p></div><span>Downloads</span></div> : <div className="empty-recent"><strong>No completed transfers yet</strong><p>Your latest verified file will appear here.</p></div>}{outgoing && <div className="recent-row"><span className="file-tile sky">↑</span><div><strong>{outgoing.name}</strong><p>{outgoingArmed ? "Waiting for phone" : "Selected on this PC"}</p></div><span>{formatBytes(outgoing.size)}</span></div>}</section></div>}
+
+      {activeView === "settings" && <div className="page secondary-page"><section className="page-heading compact"><p className="eyebrow">DEVICE & PRIVACY</p><h1>Settings</h1><p>Local controls for this Windows receiver.</p></section><section className="settings-card"><div className="setting-row"><div><strong>Receive folder</strong><p>Verified incoming files</p></div><span>Downloads</span></div><div className="setting-row"><div><strong>Connection</strong><p>Private local network only</p></div><span>{receiverLabel}</span></div><div className="setting-row"><div><strong>Camera processing</strong><p>Gesture frames never leave this PC</p></div><span>On device</span></div>{receiver.endpoint && <div className="setting-row"><div><strong>Local endpoint</strong><p>Current listening address</p></div><code>{receiver.endpoint}</code></div>}</section><button type="button" className="settings-action" onClick={() => setShowPairing(true)}>Pair another phone <span>↗</span></button></div>}
     </main>
 
-    {showPairing && receiver.pairingUri && <div className="modal-backdrop" role="presentation" onMouseDown={() => setShowPairing(false)}><section className="pairing-modal" role="dialog" aria-modal="true" aria-labelledby="pairing-title" onMouseDown={event => event.stopPropagation()}><div className="modal-header"><div><p className="eyebrow">NEW PHONE</p><h2 id="pairing-title">Scan once.</h2></div><button type="button" className="icon-button" onClick={() => setShowPairing(false)} aria-label="Close pairing">×</button></div><div className="pairing-content">{receiver.pairingQrDataUrl && <img className="pairing-qr" src={receiver.pairingQrDataUrl} alt="Signed ABOT pairing QR code" />}<div><p className="pairing-code" aria-label={`Pairing code ${receiver.pairingCode}`}>{receiver.pairingCode}</p><p className="muted">Scan this QR in ABOT, then confirm the same six-digit code on both devices.</p></div></div><button type="button" onClick={() => void approvePairing()} disabled={receiver.pairingApproved}>{receiver.pairingApproved ? "This PC is approved" : "The codes match"}</button></section></div>}
+    {showPairing && receiver.pairingUri && <div className="modal-backdrop" role="presentation" onMouseDown={() => setShowPairing(false)}><section className="pairing-modal" role="dialog" aria-modal="true" aria-labelledby="pairing-title" onMouseDown={event => event.stopPropagation()}><div className="modal-header"><div><p className="eyebrow">NEW PHONE</p><h2 id="pairing-title">Scan once</h2></div><button type="button" className="close-button" onClick={() => setShowPairing(false)} aria-label="Close pairing">×</button></div><div className="pairing-content">{receiver.pairingQrDataUrl && <img className="pairing-qr" src={receiver.pairingQrDataUrl} alt="Signed ABOT pairing QR code" />}<div><p className="pairing-code" aria-label={`Pairing code ${receiver.pairingCode}`}>{receiver.pairingCode}</p><p>Scan this QR in ABOT, then confirm the same six-digit code on both devices.</p></div></div><button type="button" className="pill-button navy full" onClick={() => void approvePairing()} disabled={receiver.pairingApproved}>{receiver.pairingApproved ? "This PC is approved" : "The codes match"}</button></section></div>}
     {toast && <div className="toast" role="status"><span>✓</span>{toast}</div>}
   </div>;
 }

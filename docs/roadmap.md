@@ -73,6 +73,13 @@ Reverse-direction hardware acceptance, mutual durable pairing, close-to-tray/bac
 - Tested: five Windows gesture tests, TypeScript typecheck, Vite production build, native Tauri debug build, and a three-second native process smoke passed. Thirteen Android unit tests, debug APK assembly, and lint passed. Windows was visually inspected in local browser renders at desktop and tablet widths; the Android home, activity, settings, and gallery surfaces were inspected on the authorized API 35 device.
 - Pending: a native Windows visual capture is still unavailable because the Computer Use native pipe is absent. A final physical bidirectional file-transfer run is still required to validate transfer behavior on the redesigned surfaces; this UI-only change does not replace the existing hardware acceptance requirements.
 
+## Premium relay UI refinement
+
+- Implemented: the reference-inspired deep-navy, sky-blue, pale-gray, and white system across every existing Android and Windows screen. Manrope is bundled locally under the SIL Open Font License. Rounded feature cards, pill actions, compact navigation, real session activity, and original geometric transfer illustrations replace the previous hard-border editorial treatment without changing transfer logic.
+- Scope held: no authentication, accounts, plans, payments, quotas, cloud storage, bookmarks, or fake transfer records were introduced.
+- Device-checked: Android Home, Activity, Settings, navigation, discovery-off state, and the real MediaStore Gallery render with the final system on the authorized API 35 phone. Windows Overview was inspected at 1440 px and the 768 px native minimum.
+- Pending: outgoing Grab and incoming receive-camera inspection during the existing physical bidirectional transfer/hash acceptance run.
+
 ## Multi-selection and manual discovery control
 
 - Implemented: Android's native picker accepts deduplicated mixed multi-file selections and automatically opens the existing Grab page. ABOT Gallery now queries permission-scoped photos and videos, supports mixed selection/deselection, selection counts, and explicit Continue. A Grab gesture queues consecutive existing protocol offers with aggregate progress and per-file failure reporting; Windows continues to stream, consent, verify, and finalize each file independently.

@@ -104,3 +104,18 @@
 ### Pending
 
 - Inspect the packaged Windows taskbar and installer icon on the target laptop after installation.
+
+## Premium relay frontend redesign - 2026-11-08
+
+### Implemented
+
+- Android Home, Activity, Settings, Gallery, outgoing Grab, and incoming receive-camera surfaces now use a shared deep-navy, sky-blue, pale-gray, and paper-white visual system with locally bundled Manrope typography, rounded feature cards, pill controls, compact icon navigation, and original transfer artwork. All existing pairing, discovery, multi-selection, gesture, consent, and transfer callbacks remain wired to their prior logic.
+- Windows Overview, Activity, Settings, pairing, send/receive, empty, progress, completion, failure, toast, and gesture states use the equivalent responsive desktop design. The 760 px native minimum remains supported, while the desktop sidebar becomes compact bottom navigation below 720 px for browser-level resilience.
+
+### Verified
+
+- Android unit tests, debug APK assembly, and lint passed; the rebuilt APK installed with existing data preserved. Home, Activity, Settings, and the real MediaStore Gallery were inspected on the authorized Android 15 device after explicitly mapping Manrope's variable weight axis. Five Windows gesture tests, TypeScript typecheck, Vite production build, and native Tauri debug build passed. Windows Overview was visually inspected at 1440 px and the 768 px native minimum; the latter stacked feature cards without clipping.
+
+### Pending
+
+- Inspect the outgoing Grab and incoming receive-camera surfaces during the established physical bidirectional-transfer and hash acceptance flows; this presentation-only change does not itself prove cross-device transfer behavior.

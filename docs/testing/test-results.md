@@ -104,3 +104,12 @@ Generated debug artifacts:
 - Windows: all five gesture tests, TypeScript typecheck, and the Vite production build passed. `pnpm exec tauri build --debug` produced the native executable plus 15.46 MiB NSIS and 17.41 MiB MSI debug bundles with the regenerated icon set.
 - Visual/source checks: the 256 px Windows PNG icon was inspected; the black/blue forms, white center, padding, and rounded-square background remained distinct. All final SVG sources parsed as XML and `git diff --check` passed.
 - Boundary: the installed Windows taskbar and installer presentation still need inspection on the target laptop. No transfer behavior or protocol was changed by this branding update.
+
+## Premium relay frontend redesign - 2026-11-08
+
+- Android: `testDebugUnitTest assembleDebug lintDebug --no-daemon` passed. The final 69,943,963-byte debug APK has SHA-256 `5D3B69D3F15F215B84CB9A48DE8A9B91A74A2A00D3A018EFB2D8FFA4182BB8E5` and installed successfully with existing data preserved on the Android 15/API 35 Infinix X6880.
+- Windows: all five gesture tests passed; TypeScript typecheck and the 41-module Vite production build passed; `pnpm exec tauri build --debug --no-bundle` produced the updated native executable.
+- Visual QA: Windows Overview was inspected from static production-equivalent renders at 1440 x 1000 and 768 x 900. The desktop and native-minimum layouts retained readable typography, complete feature cards, rounded navigation, and no clipping. A narrower browser-only capture identified a fixed-navigation width constraint, which was corrected even though the Tauri window minimum is 760 px.
+- Android visual QA: after the owner unlocked the phone, Home, Activity, Settings, bottom navigation, discovery-off state, disabled actions, and the real MediaStore Gallery were inspected on the Android 15/API 35 Infinix X6880. The first render exposed a variable-font axis issue; explicit 400/600/700/800 mappings corrected heading and control weights in the final installed APK. No media was selected or transmitted during inspection.
+- Android visual boundary: outgoing Grab and incoming receive-camera surfaces were source-reviewed and compiled but were not opened during this pass because doing so would require selecting media and establishing a live pending transfer.
+- Functional boundary: this was a presentation-layer update. No physical cross-device transfer or hash comparison was performed, so the established bidirectional hardware acceptance tasks remain pending.

@@ -28,3 +28,13 @@ Two offset forms complete a continuous local loop around a shared center. This d
 ## Usage
 
 Keep clear space equal to one quarter of the mark width. Use the full-color mark on paper white. Use the dark or light monochrome version where color is unavailable. Do not stretch, rotate, recolor, outline, or add effects. The smallest recommended digital size is 24 px; below that size, use the mark without the wordmark.
+
+## Product typography and UI colors
+
+ABOT bundles the Manrope variable font locally for Android and Windows. Its SIL Open Font License is stored in `MANROPE-LICENSE.txt`; neither application downloads fonts at runtime.
+
+- Deep Navy: `#062456`
+- Sky Blue: `#8EDCFA`
+- Accent Blue: `#4BBDEB`
+- Pale Gray: `#EEF0F2`
+- Paper White: `#FFFFFF`

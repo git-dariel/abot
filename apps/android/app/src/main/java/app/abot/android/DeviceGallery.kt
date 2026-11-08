@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -37,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -138,27 +140,32 @@ internal fun AbotGalleryScreen(
         loading = false
     }
 
-    Column(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+    Column(modifier = Modifier.fillMaxSize().background(AbotPaper).systemBarsPadding()) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             OutlinedButton(
                 onClick = onBack,
                 enabled = !isBusy,
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, AbotInk),
+                shape = AbotButtonShape,
+                border = androidx.compose.foundation.BorderStroke(1.dp, AbotLine),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = AbotNavy),
             ) { Text("← Back") }
             Column(modifier = Modifier.padding(start = 14.dp).weight(1f)) {
                 AbotSectionLabel("Photos & videos")
-                Text("Gallery.", style = MaterialTheme.typography.headlineLarge)
+                Text("Gallery", style = MaterialTheme.typography.headlineMedium)
             }
             AbotStatusPill(
                 label = if (receiverReady) "PC ready" else if (isDiscovering) "Finding" else "Offline",
                 connected = receiverReady,
             )
         }
-        Surface(color = if (receiverReady) AbotInk else AbotSoft, modifier = Modifier.fillMaxWidth()) {
+        Surface(
+            color = if (receiverReady) AbotNavy else AbotSoft,
+            shape = AbotCardShape,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 6.dp),
+        ) {
             Row(Modifier.padding(horizontal = 18.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
                 Surface(shape = androidx.compose.foundation.shape.CircleShape, color = if (receiverReady) AbotBlue else Color(0xFFAAAAAA)) {
                     Text(" ", fontSize = 5.sp, modifier = Modifier.padding(3.dp))
@@ -171,7 +178,7 @@ internal fun AbotGalleryScreen(
                         fontSize = 13.sp,
                     )
                     if (receiverReady) {
-                        Text("Each item stays private until Windows accepts it.", color = Color(0xFFBDBDBD), fontSize = 11.sp)
+                        Text("Each item stays private until Windows accepts it.", color = AbotPaper.copy(alpha = .68f), fontSize = 11.sp)
                     }
                 }
             }
@@ -188,7 +195,7 @@ internal fun AbotGalleryScreen(
                     Button(
                         onClick = onRequestAccess,
                         colors = abotBlueButtonColors(),
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp),
+                        shape = AbotButtonShape,
                     ) { Text("Allow media access", fontWeight = FontWeight.Bold) }
                 }
             }
@@ -203,9 +210,9 @@ internal fun AbotGalleryScreen(
             else -> Column(Modifier.fillMaxSize()) {
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(118.dp),
-                    modifier = Modifier.weight(1f).padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.weight(1f).padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(media, key = { it.uri.toString() }) { item ->
                         val key = item.uri.toString()
@@ -221,7 +228,7 @@ internal fun AbotGalleryScreen(
                         )
                     }
                 }
-                Surface(color = AbotPaper, border = androidx.compose.foundation.BorderStroke(1.dp, AbotInk)) {
+                Surface(color = AbotPaper, shadowElevation = 10.dp) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -244,8 +251,8 @@ internal fun AbotGalleryScreen(
                                 })
                             },
                             enabled = selectedKeys.isNotEmpty() && receiverReady && !isBusy,
-                            colors = abotBlueButtonColors(),
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp),
+                            colors = abotPrimaryButtonColors(),
+                            shape = AbotButtonShape,
                         ) { Text("Continue") }
                     }
                 }
@@ -259,7 +266,8 @@ private fun GalleryThumbnail(media: GalleryMedia, selected: Boolean, enabled: Bo
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(132.dp)
+            .height(128.dp)
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(18.dp))
             .background(AbotSoft)
             .clickable(enabled = enabled, onClick = onClick),
     ) {
@@ -272,13 +280,13 @@ private fun GalleryThumbnail(media: GalleryMedia, selected: Boolean, enabled: Bo
         )
         if (!enabled) Box(Modifier.fillMaxSize().background(AbotPaper.copy(alpha = 0.62f)))
         if (media.isVideo) {
-            Surface(color = AbotInk, modifier = Modifier.align(Alignment.BottomStart).padding(6.dp)) {
+            Surface(color = AbotNavy, shape = androidx.compose.foundation.shape.RoundedCornerShape(50), modifier = Modifier.align(Alignment.BottomStart).padding(7.dp)) {
                 Text("VIDEO", color = AbotPaper, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp))
             }
         }
         if (selected) {
             Box(Modifier.fillMaxSize().background(AbotBlue.copy(alpha = 0.28f)))
-            Surface(color = AbotBlue, shape = androidx.compose.foundation.shape.CircleShape, modifier = Modifier.align(Alignment.TopEnd).padding(7.dp)) {
+            Surface(color = AbotSky, shape = androidx.compose.foundation.shape.CircleShape, modifier = Modifier.align(Alignment.TopEnd).padding(7.dp)) {
                 Text("✓", color = AbotInk, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
             }
         }

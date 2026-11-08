@@ -56,6 +56,10 @@ After a successful QR-approved transfer, provision a random per-phone reconnect 
 
 Use one cross-platform visual language built from paper white, ink black, cornflower blue, hard one-pixel borders, generous whitespace, and bold editorial headings. Share tokens and component principles, but keep navigation platform-appropriate: a responsive desktop sidebar that becomes a bottom bar on narrow Windows layouts, and Android top/bottom app bars with scrollable Compose content. Show only real receiver, transfer, pairing, and session state; do not invent dashboard metrics or persistent history. Keep the redesign inside the presentation layer and preserve all protocol, consent, streaming, verification, and local-first boundaries.
 
+## ADR-016: Premium relay visual system
+
+Supersede ADR-014's visual tokens while retaining its platform and architecture boundaries. Use deep navy `#062456`, sky blue `#8EDCFA`, accent blue `#4BBDEB`, pale gray `#EEF0F2`, and paper white `#FFFFFF`; locally bundle the OFL-licensed Manrope variable font. Use large rounded feature cards, pill controls, compact navigation, and original geometric transfer artwork. Keep Android and Windows layouts platform-appropriate, display only real application state, and do not add accounts, plans, quotas, cloud features, or fabricated history.
+
 ## ADR-015: Session-only discovery and sequential batches
 
 Require an explicit Android Settings toggle before trusted Windows discovery starts. Keep the permission in process memory so a fresh launch is always OFF; use a non-sticky foreground service only while the user-enabled session is active or an already accepted transfer is finishing. For Android-to-Windows multi-selection, do not introduce a batch wire format: deduplicate content URIs and send each item as a consecutive existing authenticated offer, preserving independent Windows consent, 64 KiB streaming, size/SHA-256 verification, atomic finalization, and per-file failure reporting.

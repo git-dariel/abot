@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -72,15 +74,20 @@ class ReceiveGestureActivity : ComponentActivity() {
                         Modifier.systemBarsPadding().padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
-                        AbotSectionLabel("Receive gesture")
-                        Text("Catch this file.", style = MaterialTheme.typography.headlineLarge)
-                        Text("Hold one open palm", color = AbotBlue, style = MaterialTheme.typography.titleLarge)
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            AbotBrandMark(Modifier.size(28.dp))
+                            AbotSectionLabel("Receive gesture")
+                        }
+                        Text("Catch this file", style = MaterialTheme.typography.headlineLarge)
+                        Surface(color = AbotSky, shape = androidx.compose.foundation.shape.RoundedCornerShape(50)) {
+                            Text("Hold one open palm", color = AbotNavy, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
+                        }
                         Text("File bytes start only after this phone confirms.", color = AbotMuted, style = MaterialTheme.typography.bodySmall)
                         AndroidView(
                             factory = { previewView },
-                            modifier = Modifier.fillMaxWidth().weight(1f).background(AbotInk),
+                            modifier = Modifier.fillMaxWidth().weight(1f).clip(AbotCardShape).background(AbotNavy),
                         )
-                        Surface(color = AbotSoft, modifier = Modifier.fillMaxWidth()) {
+                        Surface(color = AbotSky, shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
                             Text(message, Modifier.padding(14.dp), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                         }
                         Text("Camera frames stay on this phone.", style = MaterialTheme.typography.bodySmall, color = AbotMuted)
@@ -88,14 +95,14 @@ class ReceiveGestureActivity : ComponentActivity() {
                             OutlinedButton(
                                 onClick = { finish() },
                                 modifier = Modifier.weight(1f),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, AbotInk),
-                                shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, AbotLine),
+                                shape = AbotButtonShape,
                             ) { Text("Not now") }
                             Button(
                                 onClick = ::accept,
                                 modifier = Modifier.weight(1f),
                                 colors = abotBlueButtonColors(),
-                                shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp),
+                                shape = AbotButtonShape,
                             ) { Text("Receive now") }
                         }
                     }

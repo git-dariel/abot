@@ -21,6 +21,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -72,13 +73,18 @@ class GestureCaptureActivity : ComponentActivity() {
         setContent {
             AbotTheme {
                 Surface(Modifier.fillMaxSize(), color = AbotPaper) {
-                    Column(Modifier.systemBarsPadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        AbotSectionLabel("Send gesture")
-                        Text(if (itemCount == 1) "Grab this file." else "Grab $itemCount files.", style = MaterialTheme.typography.headlineLarge)
-                        Text("Open palm → closed fist", color = AbotBlue, style = MaterialTheme.typography.titleLarge)
+                    Column(Modifier.systemBarsPadding().padding(20.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            AbotBrandMark(Modifier.size(28.dp))
+                            AbotSectionLabel("Send gesture")
+                        }
+                        Text(if (itemCount == 1) "Grab this file" else "Grab $itemCount files", style = MaterialTheme.typography.headlineLarge)
+                        Surface(color = AbotSky, shape = androidx.compose.foundation.shape.RoundedCornerShape(50)) {
+                            Text("Open palm → closed fist", color = AbotNavy, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
+                        }
                         Text("The gesture prepares an offer. Windows still confirms before any bytes move.", color = AbotMuted, style = MaterialTheme.typography.bodySmall)
                         if (mediaNames.isNotEmpty()) {
-                            Surface(color = AbotSoft, modifier = Modifier.fillMaxWidth()) {
+                            Surface(color = AbotSoft, shape = AbotCardShape, modifier = Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     mediaNames.take(3).forEachIndexed { index, name ->
                                         val size = mediaSizes.getOrNull(index) ?: 0L
@@ -96,7 +102,8 @@ class GestureCaptureActivity : ComponentActivity() {
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f)
-                                .background(AbotInk),
+                                .clip(AbotCardShape)
+                                .background(AbotNavy),
                             contentAlignment = Alignment.Center,
                         ) {
                             if (previewUri != null && previewIsVisual) {
@@ -115,21 +122,22 @@ class GestureCaptureActivity : ComponentActivity() {
                             }
                             Surface(
                                 modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp).size(width = 150.dp, height = 200.dp),
-                                color = AbotInk,
-                                border = androidx.compose.foundation.BorderStroke(2.dp, AbotBlue),
+                                color = AbotNavy,
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
+                                border = androidx.compose.foundation.BorderStroke(3.dp, AbotPaper),
                             ) {
                                 AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
                             }
                         }
-                        Surface(color = AbotSoft, modifier = Modifier.fillMaxWidth()) {
+                        Surface(color = AbotSky, shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
                             Text(message, Modifier.padding(14.dp), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                         }
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text("Camera stays on this phone", style = MaterialTheme.typography.bodySmall, color = AbotMuted, modifier = Modifier.weight(1f))
                             OutlinedButton(
                                 onClick = { finish() },
-                                border = androidx.compose.foundation.BorderStroke(1.dp, AbotInk),
-                                shape = androidx.compose.foundation.shape.RoundedCornerShape(2.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, AbotLine),
+                                shape = AbotButtonShape,
                             ) { Text("Cancel") }
                         }
                     }

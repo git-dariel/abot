@@ -76,6 +76,7 @@ Reverse-direction hardware acceptance, mutual durable pairing, close-to-tray/bac
 ## Premium relay UI refinement
 
 - Implemented: the reference-inspired deep-navy, sky-blue, pale-gray, and white system across every existing Android and Windows screen. Manrope is bundled locally under the SIL Open Font License. Rounded feature cards, pill actions, compact navigation, real session activity, and original geometric transfer illustrations replace the previous hard-border editorial treatment without changing transfer logic.
+- Implemented: removed redundant introductory and supporting labels from Overview/Home, Activity, and Settings on both platforms so connection state and primary actions are surfaced sooner; functional copy and page titles remain intact.
 - Scope held: no authentication, accounts, plans, payments, quotas, cloud storage, bookmarks, or fake transfer records were introduced.
 - Device-checked: Android Home, Activity, Settings, navigation, discovery-off state, and the real MediaStore Gallery render with the final system on the authorized API 35 phone. Windows Overview was inspected at 1440 px and the 768 px native minimum.
 - Pending: outgoing Grab and incoming receive-camera inspection during the existing physical bidirectional transfer/hash acceptance run.

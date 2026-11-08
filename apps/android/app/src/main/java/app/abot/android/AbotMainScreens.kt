@@ -170,12 +170,6 @@ private fun AbotHomeScreen(
             .imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            AbotSectionLabel("Private local transfer")
-            Text("Ready when you are.", style = MaterialTheme.typography.headlineLarge)
-            Text("Send, receive, and keep every file between your devices.", style = MaterialTheme.typography.bodyMedium, color = AbotMuted)
-        }
-
         AbotConnectionStrip(state)
 
         state.verifiedPairing?.takeIf { !state.pairingTrusted }?.let { pairing ->
@@ -329,9 +323,7 @@ private fun AbotActivityScreen(state: AbotMainUiState, modifier: Modifier = Modi
             .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        AbotSectionLabel("Transfer log")
         Text("Activity", style = MaterialTheme.typography.headlineLarge)
-        Text("Verified transfers from this app session.", color = AbotMuted, style = MaterialTheme.typography.bodyMedium)
         AbotRecentCard(state)
         AbotPanel(color = AbotSky) {
             Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -363,9 +355,7 @@ private fun AbotSettingsScreen(
             .imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        AbotSectionLabel("Device & privacy")
         Text("Settings", style = MaterialTheme.typography.headlineLarge)
-        Text("Control when this phone looks for your trusted Windows receiver.", color = AbotMuted, style = MaterialTheme.typography.bodyMedium)
 
         AbotPanel(color = AbotNavy) {
             Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {

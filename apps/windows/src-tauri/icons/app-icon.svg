@@ -1,6 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="ABOT">
-  <rect width="512" height="512" rx="112" fill="#142E29"/>
-  <path d="M116 356L224 146c14-27 50-27 64 0l108 210" fill="none" stroke="#A5F3C0" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M168 290h176" fill="none" stroke="#F8FAF9" stroke-width="36" stroke-linecap="round"/>
-  <circle cx="410" cy="405" r="19" fill="#A5F3C0"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="ABOT Bridge Pulse">
+  <rect width="512" height="512" rx="104" fill="#FFFFFF"/>
+  <g transform="translate(112 112) scale(2)">
+    <path fill="#050505" d="M0 0h68v28H28v88h40v28H0z"/>
+    <path fill="#548CFF" d="M144 0H76v28h40v88H76v28h68z"/>
+    <rect x="58" y="58" width="28" height="28" rx="4" fill="#050505"/>
+    <circle cx="72" cy="72" r="6" fill="#FFFFFF"/>
+  </g>
 </svg>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144" role="img" aria-labelledby="title">
+  <title id="title">ABOT Bridge Pulse monochrome light mark</title>
+  <path fill="#FFFFFF" d="M0 0h68v28H28v88h40v28H0zM144 0H76v28h40v88H76v28h68z"/>
+  <rect x="58" y="58" width="28" height="28" rx="4" fill="#FFFFFF"/>
+  <circle cx="72" cy="72" r="6" fill="#050505"/>
+</svg>

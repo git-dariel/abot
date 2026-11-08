@@ -5,19 +5,15 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:fillColor="@android:color/transparent"
-        android:pathData="M24,78 L49,30 C51.5,25 56.5,25 59,30 L84,78"
-        android:strokeColor="@color/abot_mint"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:strokeWidth="10" />
-    <path
-        android:fillColor="@android:color/transparent"
-        android:pathData="M37,62 L71,62"
-        android:strokeColor="@color/abot_off_white"
-        android:strokeLineCap="round"
-        android:strokeWidth="8" />
+        android:fillColor="@color/abot_forest"
+        android:pathData="M24,24h28.33v11.67H35.67v36.66h16.66V84H24z" />
     <path
         android:fillColor="@color/abot_mint"
-        android:pathData="M83,87 A5,5 0,1 0,93 87 A5,5 0,1 0,83 87" />
+        android:pathData="M84,24H55.67v11.67h16.66v36.66H55.67V84H84z" />
+    <path
+        android:fillColor="@color/abot_forest"
+        android:pathData="M48.17,48.17h11.66v11.66H48.17z" />
+    <path
+        android:fillColor="@color/abot_off_white"
+        android:pathData="M51.5,54a2.5,2.5 0,1 0,5 0a2.5,2.5 0,1 0,-5 0" />
 </vector>

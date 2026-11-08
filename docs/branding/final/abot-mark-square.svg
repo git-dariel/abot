@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">ABOT app icon</title>
+  <desc id="desc">The Bridge Pulse mark centered on paper white.</desc>
+  <rect width="1024" height="1024" rx="208" fill="#FFFFFF"/>
+  <g transform="translate(224 224) scale(4)">
+    <path fill="#050505" d="M0 0h68v28H28v88h40v28H0z"/>
+    <path fill="#548CFF" d="M144 0H76v28h40v88H76v28h68z"/>
+    <rect x="58" y="58" width="28" height="28" rx="4" fill="#050505"/>
+    <circle cx="72" cy="72" r="6" fill="#FFFFFF"/>
+  </g>
+</svg>

@@ -1,6 +1,8 @@
-# ABOT logo concept approval
+# ABOT brand identity
 
-These are editable approval-stage SVG studies. They deliberately do not replace Android launcher icons, Windows icons, splash screens, or the current in-app wordmark.
+Concept A, **Bridge Pulse**, was approved on 2026-11-08 and is now the production identity for Android and Windows.
+
+The original concept studies remain in `concepts/` for design history. Production-ready source marks live in `final/`.
 
 ## Concept A - Bridge Pulse (recommended)
 
@@ -14,6 +16,15 @@ A recognizable letter A is built from two peers joined by a blue relay. This dir
 
 Two offset forms complete a continuous local loop around a shared center. This direction feels friendlier and more fluid while staying geometric.
 
-## Approval boundary
+## Production files
 
-After one concept is approved, refine that direction and produce horizontal, wordmark, symbol, square icon, light, dark, monochrome, Windows ICO/PNG, and Android adaptive/monochrome assets. Until approval, production branding remains unchanged.
+- `final/abot-mark.svg`: full-color transparent mark.
+- `final/abot-mark-square.svg`: paper-white app-icon master.
+- `final/abot-mark-monochrome-dark.svg`: dark one-color use.
+- `final/abot-mark-monochrome-light.svg`: reversed one-color use.
+- Android uses a native vector adaptive icon, splash mark, and monochrome notification mark.
+- Windows uses the mark in the application shell, favicon, and generated Tauri PNG/ICO/ICNS bundle assets.
+
+## Usage
+
+Keep clear space equal to one quarter of the mark width. Use the full-color mark on paper white. Use the dark or light monochrome version where color is unavailable. Do not stretch, rotate, recolor, outline, or add effects. The smallest recommended digital size is 24 px; below that size, use the mark without the wordmark.

@@ -97,3 +97,10 @@ Generated debug artifacts:
 - Device selection: ABOT Gallery selected two permission-scoped media items, displayed `2 selected`, mixed-media guidance, and Continue; Continue opened `Grab 2 files` with both names and sizes. Android DocumentsUI multi-select also returned two files and opened the same Grab page automatically.
 - Logo validation: the three SVG concepts and comparison board rendered successfully in headless Edge. Existing Android and Windows production icon resources were not modified.
 - Boundary: no physical palm-to-fist batch was completed, no two Windows acceptance gestures were performed, and no cross-device hashes were compared. These remain hardware acceptance tasks rather than claimed transfer success.
+
+## Bridge Pulse production identity - 2026-11-08
+
+- Android: `testDebugUnitTest assembleDebug lintDebug --no-daemon` passed. The debug APK has SHA-256 `033ADCCFA9E311187C5EAB119FAA5CF1D79E2FC2DB0969CF0456E2FFE4418689`, installed successfully on the authorized Android 15/API 35 Infinix X6880, and displayed the approved Concept A mark clearly under the OEM launcher mask.
+- Windows: all five gesture tests, TypeScript typecheck, and the Vite production build passed. `pnpm exec tauri build --debug` produced the native executable plus 15.46 MiB NSIS and 17.41 MiB MSI debug bundles with the regenerated icon set.
+- Visual/source checks: the 256 px Windows PNG icon was inspected; the black/blue forms, white center, padding, and rounded-square background remained distinct. All final SVG sources parsed as XML and `git diff --check` passed.
+- Boundary: the installed Windows taskbar and installer presentation still need inspection on the target laptop. No transfer behavior or protocol was changed by this branding update.

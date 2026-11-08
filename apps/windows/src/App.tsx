@@ -2,6 +2,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect, useRef, useState } from "react";
 import { GestureAccept } from "./GestureAccept";
+import abotMark from "./assets/abot-mark.svg";
 
 type IncomingOffer = { transferId: string; fileId: string; name: string; size: number; sha256: string };
 type ReceiverSnapshot = {
@@ -139,13 +140,13 @@ export function App() {
 
   return <div className="app-frame">
     <aside className="sidebar" aria-label="Primary navigation">
-      <button className="brand" type="button" onClick={() => setActiveView("overview")} aria-label="ABOT overview">abot.</button>
+      <button className="brand" type="button" onClick={() => setActiveView("overview")} aria-label="ABOT overview"><img src={abotMark} alt="" /><span>abot.</span></button>
       <nav>{(["overview", "activity", "settings"] as const).map(view => <button type="button" key={view} className={`nav-item${activeView === view ? " active" : ""}`} onClick={() => setActiveView(view)}><span aria-hidden="true">{view === "overview" ? "01" : view === "activity" ? "02" : "03"}</span>{view[0].toUpperCase() + view.slice(1)}</button>)}</nav>
       <div className="sidebar-note"><span className="privacy-mark" aria-hidden="true" />Local by design<small>Files and camera frames stay on your devices.</small></div>
     </aside>
 
     <main className="workspace">
-      <header className="topbar"><button className="mobile-brand" type="button" onClick={() => setActiveView("overview")}>abot.</button><p>{activeView}</p><span className={`connection-pill ${receiverTone}`}><i aria-hidden="true" />{receiverLabel}</span></header>
+      <header className="topbar"><button className="mobile-brand" type="button" onClick={() => setActiveView("overview")} aria-label="ABOT overview"><img src={abotMark} alt="" /><span>abot.</span></button><p>{activeView}</p><span className={`connection-pill ${receiverTone}`}><i aria-hidden="true" />{receiverLabel}</span></header>
 
       {activeView === "overview" && <>
         <section className="page-heading"><p className="eyebrow">PRIVATE. LOCAL. IMMEDIATE.</p><h1>Move files.<br /><em>Not friction.</em></h1><p className="lede">Your trusted phone reconnects automatically. Drop a file to send, or leave ABOT ready to catch one.</p></section>

@@ -90,3 +90,17 @@
 ### Pending
 
 - Perform a physical palm-to-fist two-file send, accept both offers on Windows, and compare both hashes. Logo integration waits for explicit concept approval.
+
+## Bridge Pulse production identity - 2026-11-08
+
+### Implemented
+
+- The owner approved Concept A, Bridge Pulse. Its opposing-device mark and protected connection point now replace the previous Android adaptive launcher, themed launcher, splash, and notification symbols plus the Windows bundle, taskbar, favicon, sidebar, and responsive header marks. Final full-color, square, and monochrome SVG masters and usage guidance live under `docs/branding/final/`.
+
+### Verified
+
+- Android unit tests, debug APK assembly, and lint passed; the APK installed on the authorized Android 15 Infinix X6880, and the real OEM launcher mask preserved a clear black/blue silhouette. Five Windows gesture tests, TypeScript typecheck, Vite production build, native debug executable build, NSIS packaging, and MSI packaging passed. Final SVG sources parsed successfully, and the 256 px Windows icon was visually inspected.
+
+### Pending
+
+- Inspect the packaged Windows taskbar and installer icon on the target laptop after installation.

@@ -117,6 +117,7 @@
 
 - Android unit tests, debug APK assembly, and lint passed; the rebuilt APK installed with existing data preserved. Home, Activity, Settings, and the real MediaStore Gallery were inspected on the authorized Android 15 device after explicitly mapping Manrope's variable weight axis. Five Windows gesture tests, TypeScript typecheck, Vite production build, and native Tauri debug build passed. Windows Overview was visually inspected at 1440 px and the 768 px native minimum; the latter stacked feature cards without clipping.
 - After the copy cleanup, Android unit tests, debug APK assembly, and lint passed again; the five Windows gesture tests, TypeScript typecheck, and Vite production build also passed.
+- On 2026-11-10, all 19 Rust workspace tests and strict Clippy with warnings denied passed. The current native Tauri debug executable rebuilt successfully and remained running through a three-second startup smoke test. No Android device was connected, so hardware acceptance remains pending.
 
 ### Pending
 

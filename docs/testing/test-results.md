@@ -114,3 +114,10 @@ Generated debug artifacts:
 - Android visual boundary: outgoing Grab and incoming receive-camera surfaces were source-reviewed and compiled but were not opened during this pass because doing so would require selecting media and establishing a live pending transfer.
 - Functional boundary: this was a presentation-layer update. No physical cross-device transfer or hash comparison was performed, so the established bidirectional hardware acceptance tasks remain pending.
 - Follow-up copy cleanup: after removing redundant Overview/Home, Activity, and Settings labels on both platforms, Android `testDebugUnitTest assembleDebug lintDebug --no-daemon` passed; Windows' five gesture tests, TypeScript typecheck, and Vite production build passed.
+
+## Post-copy-cleanup non-hardware validation - 2026-11-10
+
+- `cargo test --workspace` passed all 19 Rust tests, covering discovery filtering, signed pairing, encryption, streamed verification/finalization, rejection cleanup, trusted reconnect, consent-before-bytes, and receiver re-arming.
+- `cargo clippy --workspace --all-targets --all-features -- -D warnings` passed.
+- `pnpm exec tauri build --debug --no-bundle` rebuilt `target/debug/abot-windows.exe`; the executable remained running through a three-second hidden startup smoke. The executable is 29,096,960 bytes with SHA-256 `B353EE77846EC0E7D8E8FBBA72CB88B4C0EFDFB146AA8F4355EEC0F0EE11898D`.
+- No Android device was connected. Physical gestures, bidirectional transfer hashes, Android foreground/background/locked behavior, and installed-device icon inspection were not run and remain hardware acceptance tasks.

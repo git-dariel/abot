@@ -79,6 +79,7 @@ Reverse-direction hardware acceptance, mutual durable pairing, close-to-tray/bac
 - Implemented: removed redundant introductory and supporting labels from Overview/Home, Activity, and Settings on both platforms so connection state and primary actions are surfaced sooner; functional copy and page titles remain intact.
 - Scope held: no authentication, accounts, plans, payments, quotas, cloud storage, bookmarks, or fake transfer records were introduced.
 - Device-checked: Android Home, Activity, Settings, navigation, discovery-off state, and the real MediaStore Gallery render with the final system on the authorized API 35 phone. Windows Overview was inspected at 1440 px and the 768 px native minimum.
+- Additional desktop validation on 2026-11-10: all 19 Rust workspace tests, strict Clippy, the native Tauri debug build, and a three-second native startup smoke passed after the redundant-copy cleanup.
 - Pending: outgoing Grab and incoming receive-camera inspection during the existing physical bidirectional transfer/hash acceptance run.
 
 ## Multi-selection and manual discovery control

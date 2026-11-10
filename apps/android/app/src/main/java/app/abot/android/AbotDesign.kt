@@ -139,7 +139,7 @@ internal fun AbotPanel(modifier: Modifier = Modifier, color: Color = AbotSoft, c
 
 @Composable
 internal fun AbotTransferArtwork(modifier: Modifier = Modifier, reversed: Boolean = false) {
-    Canvas(modifier = modifier.graphicsLayer(scaleX = if (reversed) -1f else 1f)) {
+    Canvas(modifier = modifier.graphicsLayer(rotationZ = if (reversed) 180f else 0f)) {
         val navy = if (reversed) AbotPaper else AbotNavy
         val blue = if (reversed) AbotSky else AbotBlue
         val w = size.width

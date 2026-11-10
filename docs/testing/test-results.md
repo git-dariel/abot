@@ -121,3 +121,8 @@ Generated debug artifacts:
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings` passed.
 - `pnpm exec tauri build --debug --no-bundle` rebuilt `target/debug/abot-windows.exe`; the executable remained running through a three-second hidden startup smoke. The executable is 29,096,960 bytes with SHA-256 `B353EE77846EC0E7D8E8FBBA72CB88B4C0EFDFB146AA8F4355EEC0F0EE11898D`.
 - No Android device was connected. Physical gestures, bidirectional transfer hashes, Android foreground/background/locked behavior, and installed-device icon inspection were not run and remain hardware acceptance tasks.
+
+## Android QR scanner redesign - 2026-11-11
+
+- The QR pairing launcher now opens ABOT's dedicated scanner activity, which retains JourneyApps ZXing's existing decode/result flow while supplying the custom ABOT camera layout and close action.
+- `testDebugUnitTest assembleDebug lintDebug --no-daemon` passed. No Android device was connected, so live preview, permission behavior, close control, and a physical QR scan remain pending device checks.

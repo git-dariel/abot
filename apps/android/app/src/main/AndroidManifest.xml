@@ -21,6 +21,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.ABOT"
         android:usesCleartextTraffic="false">
+        <activity
+            android:name=".QrScanActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ABOT.QrScanner" />
         <activity android:name=".GestureCaptureActivity" android:exported="false" />
         <activity android:name=".ReceiveGestureActivity" android:exported="false" />
         <service

@@ -4,4 +4,8 @@
     <color name="abot_mint">#548CFF</color>
     <color name="abot_off_white">#FFFFFF</color>
     <color name="abot_paper">#FFFFFF</color>
+    <color name="abot_scan_scrim">#05050580</color>
+    <color name="abot_scan_frame">#F4FAFF</color>
+    <color name="zxing_viewfinder_laser">@android:color/transparent</color>
+    <color name="zxing_viewfinder_mask">@android:color/transparent</color>
 </resources>

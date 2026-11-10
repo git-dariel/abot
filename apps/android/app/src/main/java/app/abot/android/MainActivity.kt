@@ -458,7 +458,7 @@ private fun AbotApp(
                 scanner.launch(
                     ScanOptions()
                         .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-                        .setPrompt("Scan the ABOT QR code on Windows")
+                        .setCaptureActivity(QrScanActivity::class.java)
                         .setBeepEnabled(false)
                         .setOrientationLocked(true),
                 )

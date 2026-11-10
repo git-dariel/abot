@@ -7,4 +7,10 @@
         <item name="android:navigationBarColor">@color/abot_paper</item>
         <item name="android:windowBackground">@drawable/launch_screen</item>
     </style>
+
+    <style name="Theme.ABOT.QrScanner" parent="Theme.ABOT">
+        <item name="android:windowBackground">@color/abot_paper</item>
+        <item name="android:statusBarColor">@color/abot_paper</item>
+        <item name="android:navigationBarColor">@color/abot_paper</item>
+    </style>
 </resources>
